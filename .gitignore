@@ -1,0 +1,15 @@
+*.md
+node_modules/
+**/node_modules/
+artifacts/
+**/artifacts/
+out/
+**/out/
+cache/
+**/cache/
+broadcast/
+**/broadcast/
+coverage/
+**/coverage/
+.env*
+!.env.example
