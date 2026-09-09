@@ -22,6 +22,12 @@ contract MockRiskyTarget {
         executeCount += units;
         return true;
     }
+
+    function executeArbitrageAndYieldTokens(address token, address recipient, uint256 amount) external returns (bool) {
+        TokenMock(token).transfer(recipient, amount);
+        executeCount += 1;
+        return true;
+    }
 }
 
 contract VerifyDay4ForkTest is Test {
@@ -78,6 +84,7 @@ contract VerifyDay4ForkTest is Test {
 
         // Fund Acting Agent with RISK token
         tokenA.mint(actingAgent, 100000e18);
+        tokenA.mint(address(mockTarget), 100000e18);
 
         // Configure blocked targets on Executor for tx-risky-02
         executor.setBlockedTarget(exploitTarget, true);
@@ -309,6 +316,55 @@ contract VerifyDay4ForkTest is Test {
         vm.stopPrank();
 
         console2.log("[PASS] Invariant 10: tx-risky-02 successfully hard-blocked on-chain.");
+    }
+
+    // -----------------------------------------------------------------
+    // MODEL B: Atomic Conditional Exit Floor
+    // Target executes first -> yields tokens to executor -> executor
+    // atomically exercises pre-committed SwapVM floor -> safe output.
+    // -----------------------------------------------------------------
+    function test_Day4_ModelB_AtomicConditionalExitFloor() public {
+        console2.log("\n--- TEST: Model B (Atomic Conditional Exit Floor) ---");
+        bytes32 txRiskyRef = 0x5555555555555555555555555555555555555555555555555555555555555555;
+        uint48 validWhile = uint48(block.timestamp + VALID_DURATION);
+
+        // Pre-Execution Commitment: Underwriter 2 pre-commits 1.05:1 hedge quote
+        ISwapVM.Order memory orderU2 = _shipQuote(u2_aggressive, U2_OFFER_ID, 105, 100, CAPACITY_U2, validWhile);
+
+        bytes memory takerTraits = _buildTakerTraits(address(executor));
+        uint256 riskYielded = 5250e18;
+        uint256 safeExpected = 5000e18;
+
+        // Target calldata: target produces 5250 RISK tokens directly to executor
+        bytes memory targetCalldata = abi.encodeWithSelector(
+            MockRiskyTarget.executeArbitrageAndYieldTokens.selector,
+            address(tokenA),
+            address(executor),
+            riskYielded
+        );
+
+        uint256 agentPreSafe = tokenB.balanceOf(actingAgent);
+
+        // Agent calls executeProtectedExit
+        vm.startPrank(actingAgent);
+        executor.executeProtectedExit(
+            txRiskyRef,
+            address(tokenA),
+            address(tokenB),
+            orderU2,
+            riskYielded,
+            takerTraits,
+            105e16,
+            address(mockTarget),
+            targetCalldata
+        );
+        vm.stopPrank();
+
+        // Verifications
+        assertTrue(registry.hasCoverage(txRiskyRef), "Model B: Coverage must be recorded in RookRegistry");
+        assertEq(mockTarget.executeCount(), 1, "Model B: Target call must execute successfully");
+        assertEq(tokenB.balanceOf(actingAgent) - agentPreSafe, safeExpected, "Model B: Agent receives guaranteed safe floor");
+        console2.log("[PASS] Model B: Target executed, floor atomically exercised, agent protected.");
     }
 
     function _shipQuote(

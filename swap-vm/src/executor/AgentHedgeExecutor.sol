@@ -86,4 +86,48 @@ contract AgentHedgeExecutor {
 
         emit ProtectedExecutionCompleted(txRef, target, order.maker, safeOut);
     }
+
+    /// @notice Model B: Atomic Conditional Exit Floor
+    /// @dev Target transaction executes first (producing tokenIn), and within the exact same
+    ///      atomic transaction, the pre-committed underwriter SwapVM floor is exercised.
+    ///      If the hedge fails or lacks liquidity, the entire transaction reverts, undoing the target call!
+    function executeProtectedExit(
+        bytes32 txRef,
+        address tokenIn,
+        address tokenOut,
+        ISwapVM.Order calldata order,
+        uint256 swapAmountIn,
+        bytes calldata takerTraitsAndData,
+        uint256 expectedHedgeRate,
+        address target,
+        bytes calldata targetCalldata
+    ) external returns (bytes memory targetResult) {
+        require(!blockedTxRefs[txRef], TransactionHardBlocked(txRef));
+        require(!blockedTargets[target], TargetHardBlocked(target));
+
+        // 1. Execute the risky target transaction (which acquires/mints tokenIn to this contract)
+        if (target != address(0) && targetCalldata.length > 0) {
+            (bool success, bytes memory ret) = target.call(targetCalldata);
+            require(success, TargetExecutionFailed(ret));
+            targetResult = ret;
+        }
+
+        // 2. Exercise the pre-committed underwriter hedge floor via SwapVM
+        IERC20(tokenIn).approve(address(router), swapAmountIn);
+        (, uint256 safeOut,) = router.swap(order, swapAmountIn, takerTraitsAndData);
+
+        // 3. Record coverage proof in RookRegistry
+        registry.recordCoverage(
+            txRef,
+            order.maker,
+            expectedHedgeRate,
+            safeOut
+        );
+
+        // 4. Transfer acquired safe collateral to caller
+        IERC20(tokenOut).transfer(msg.sender, safeOut);
+
+        emit ProtectedExecutionCompleted(txRef, target, order.maker, safeOut);
+    }
 }
+
