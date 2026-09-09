@@ -4,6 +4,7 @@ import type { ProposedTransaction } from "../agents/types.ts";
 import { RiskScoringService } from "../services/RiskScoringService.ts";
 import { UnderwriterAgent } from "../agents/UnderwriterAgent.ts";
 import { ActingAgent } from "../agents/ActingAgent.ts";
+import type { SubgraphUnderwriterProfile } from "../services/GraphClientService.ts";
 
 test("Rook Off-Chain Pipeline - RiskScoringService & Agents", async (t) => {
   const riskService = new RiskScoringService();
@@ -89,7 +90,7 @@ test("Rook Off-Chain Pipeline - RiskScoringService & Agents", async (t) => {
     const txBlocked: ProposedTransaction = {
       txRef: "0x3333333333333333333333333333333333333333333333333333333333333333",
       sender: actingAgent.address,
-      target: "0x000000000000000000000000000000000000DeaD",
+      target: "0x000000000000000000000000000000000000dEaD",
       asset: "0xE224621223356f15Cf9618007e7C22477067De69",
       amount: 50000n * 10n ** 18n,
       description: "Transfer to flagged address",
@@ -101,5 +102,56 @@ test("Rook Off-Chain Pipeline - RiskScoringService & Agents", async (t) => {
     assert.strictEqual(plan.blocked, true, "Transaction must be marked blocked");
     assert.strictEqual(plan.riskResult.hardBlock, true, "Must trigger hard block");
     assert.strictEqual(plan.riskResult.riskScore, 100);
+  });
+
+  await t.test("Invariant 7: Graph Intelligence Filters Out Unreliable Underwriter", async () => {
+    // Underwriter 4 is a bait-and-switch underwriter quoting a cheap rate (1.02:1)
+    // but The Graph tracks high cancellation history -> TIER_3_VOLATILE
+    const uBait = new UnderwriterAgent("0x2222000000000000000000000000000000000004", "BaitSwitchUnderwriter", "aggressive");
+    const testAgent = new ActingAgent(
+      actingAgent.address,
+      riskService,
+      [u1, u2, uBait]
+    );
+
+    // Provide Graph Execution Profile marking uBait as volatile (high cancellations)
+    const volatileProfile: SubgraphUnderwriterProfile = {
+      underwriter: uBait.address,
+      totalOffersShipped: "10",
+      totalOffersRepriced: "8",
+      totalOffersCancelled: "7",
+      totalCoverageSettled: "1",
+      totalSettledVolume: "1000000000000000000000",
+      averageSpreadBps: "200",
+      fillReliabilityScore: "12.5", // 1 / (1 + 7) = 12.5%
+      reputationTier: "TIER_3_VOLATILE",
+      activeOffersCount: "1",
+      lastSettlementTimestamp: "1700000000",
+    };
+    testAgent.setUnderwriterProfile(uBait.address, volatileProfile);
+
+    const txRisky: ProposedTransaction = {
+      txRef: "0x4444444444444444444444444444444444444444444444444444444444444444",
+      sender: actingAgent.address,
+      target: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      asset: "0xE224621223356f15Cf9618007e7C22477067De69",
+      amount: 5000n * 10n ** 18n,
+      description: "Risky transfer requiring reputable underwriter",
+      metadata: { isContract: true, contractVerified: false, ageDays: 1, priorTransfers: 0 },
+    };
+
+    const plan = await testAgent.evaluateAndPlan(txRisky);
+
+    assert.strictEqual(plan.proceeded, true);
+    assert.strictEqual(plan.hedged, true);
+    // Invariant 7: BaitSwitchUnderwriter must be disqualified despite aggressive rate!
+    assert.ok(plan.disqualifiedQuotes);
+    assert.strictEqual(plan.disqualifiedQuotes.length, 1);
+    assert.strictEqual(plan.disqualifiedQuotes[0].quote.underwriterName, "BaitSwitchUnderwriter");
+    assert.match(plan.disqualifiedQuotes[0].reason, /TIER_3_VOLATILE/);
+
+    // Best vetted quote remains ApexHedge (TIER_1_PRIME)
+    assert.strictEqual(plan.selectedQuote?.underwriterName, "ApexHedge");
+    assert.strictEqual(plan.selectedQuote?.effectiveRate, 1.05);
   });
 });

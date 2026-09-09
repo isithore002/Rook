@@ -106,6 +106,11 @@ export class BazanticGatewayServer {
       // 3. POST /api/v1/prepare-swap (Ingredient: prepareHedgeSwap)
       if (pathname === "/api/v1/prepare-swap" && method === "POST") {
         const body = await this.readJsonBody<{ quoteId: string; amount: string; taker: string }>(req);
+        if (!body.quoteId || !body.amount || !body.taker) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid swap request parameters: quoteId, amount, and taker are required." }));
+          return;
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
@@ -121,14 +126,15 @@ export class BazanticGatewayServer {
 
       // 4. GET /api/v1/settlement/:txRef (Ingredient: verifySettlementProof)
       if (pathname.startsWith("/api/v1/settlement/") && method === "GET") {
-        const txRef = pathname.replace("/api/v1/settlement/", "");
+        const txRef = pathname.replace("/api/v1/settlement/", "").toLowerCase();
+        const isSettled = txRef === "0x2222222222222222222222222222222222222222222222222222222222222222";
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(
           JSON.stringify({
             txRef,
             registryAddress: "0xEBb2654E241815BbbB8518067D0E6d66E56706d0",
-            isSettled: true,
-            timestamp: Math.floor(Date.now() / 1000),
+            isSettled,
+            timestamp: isSettled ? Math.floor(Date.now() / 1000) : 0,
           })
         );
         return;
