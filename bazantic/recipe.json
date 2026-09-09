@@ -1,0 +1,53 @@
+{
+  "name": "SecureTransactionHedgeRecipe",
+  "version": "1.0.0",
+  "description": "Autonomous risk evaluation, competitive hedge quote discovery, SwapVM execution preparation, and settlement verification for AI agent transactions.",
+  "author": "isithore002",
+  "gateway": "http://localhost:3000/api/v1",
+  "inputs": {
+    "txRef": { "type": "string", "description": "Unique transaction hash reference" },
+    "sender": { "type": "string", "description": "Sender agent wallet address" },
+    "target": { "type": "string", "description": "Target recipient or contract address" },
+    "asset": { "type": "string", "description": "Token contract address being transferred/swapped" },
+    "amount": { "type": "string", "description": "Amount of tokens in wei" },
+    "description": { "type": "string", "description": "Narrative description of transaction intent" }
+  },
+  "steps": [
+    {
+      "step": 1,
+      "ingredient": "scoreTransactionRisk",
+      "method": "POST",
+      "path": "/score",
+      "purpose": "Score transaction risk using deterministic rules and bounded advisory reasoning."
+    },
+    {
+      "step": 2,
+      "condition": "requiresHedge == true && hardBlock == false",
+      "ingredient": "discoverHedgeQuotes",
+      "method": "GET",
+      "path": "/quotes",
+      "purpose": "Query The Graph subgraph for active competitive underwriter offers."
+    },
+    {
+      "step": 3,
+      "condition": "requiresHedge == true && quotes.length > 0",
+      "ingredient": "prepareHedgeSwap",
+      "method": "POST",
+      "path": "/prepare-swap",
+      "purpose": "Generate SwapVM router atomic swap parameters for the optimal quote."
+    },
+    {
+      "step": 4,
+      "ingredient": "verifySettlementProof",
+      "method": "GET",
+      "path": "/settlement/{txRef}",
+      "purpose": "Confirm on-chain CoverageSettled event from RookRegistry."
+    }
+  ],
+  "outputs": {
+    "status": { "type": "string", "enum": ["PROCEEDED_UNHEDGED", "HEDGED_AND_SETTLED", "BLOCKED"] },
+    "riskScore": { "type": "number" },
+    "selectedQuote": { "type": "object" },
+    "settlementProof": { "type": "object" }
+  }
+}

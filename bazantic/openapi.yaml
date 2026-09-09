@@ -1,0 +1,205 @@
+openapi: 3.0.3
+info:
+  title: Rook Agentic Hedging Gateway API
+  description: >
+    Bazantic-compatible Gateway exposing automated risk scoring, competitive hedge offer discovery,
+    atomic SwapVM execution preparation, and on-chain settlement verification for autonomous AI agents.
+  version: 1.0.0
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local Bazantic Gateway Server
+
+paths:
+  /score:
+    post:
+      summary: Score transaction risk (Ingredient: scoreTransactionRisk)
+      operationId: scoreTransactionRisk
+      description: Evaluates transaction risk using deterministic rules and bounded advisory reasoning.
+      security:
+        - x402Payment: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoreRequest'
+      responses:
+        '200':
+          description: Successful risk evaluation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreResponse'
+        '402':
+          description: Micropayment required (x402 protocol)
+
+  /quotes:
+    get:
+      summary: Discover active hedge quotes (Ingredient: discoverHedgeQuotes)
+      operationId: discoverHedgeQuotes
+      description: Queries The Graph subgraph for live, competitive underwriter offers and historical reputation.
+      parameters:
+        - name: minCapacity
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: asset
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of active competitive quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/QuoteItem'
+
+  /prepare-swap:
+    post:
+      summary: Prepare SwapVM atomic fill calldata (Ingredient: prepareHedgeSwap)
+      operationId: prepareHedgeSwap
+      description: Generates SwapVM router order calldata and taker traits for atomic execution on Aqua Core.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrepareSwapRequest'
+      responses:
+        '200':
+          description: Prepared SwapVM swap parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepareSwapResponse'
+
+  /settlement/{txRef}:
+    get:
+      summary: Verify on-chain coverage settlement (Ingredient: verifySettlementProof)
+      operationId: verifySettlementProof
+      description: Verifies whether the specified transaction has been covered and recorded on RookRegistry.
+      parameters:
+        - name: txRef
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Settlement record proof
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettlementRecord'
+
+components:
+  securitySchemes:
+    x402Payment:
+      type: apiKey
+      name: X-402-Payment
+      in: header
+      description: Machine-to-machine micropayment token per x402 / MPP standard.
+
+  schemas:
+    ScoreRequest:
+      type: object
+      required:
+        - txRef
+        - target
+        - amount
+      properties:
+        txRef:
+          type: string
+          example: "0x2222222222222222222222222222222222222222222222222222222222222222"
+        sender:
+          type: string
+          example: "0x3333333333333333333333333333333333333333"
+        target:
+          type: string
+          example: "0x90F79bf6EB2c4f870365E785982E1f101E93b906"
+        asset:
+          type: string
+          example: "0xE224621223356f15Cf9618007e7C22477067De69"
+        amount:
+          type: string
+          example: "5000000000000000000000"
+        description:
+          type: string
+          example: "High-value swap on newly deployed automated market maker pool"
+
+    ScoreResponse:
+      type: object
+      properties:
+        riskScore:
+          type: number
+          example: 75
+        hardBlock:
+          type: boolean
+          example: false
+        requiresHedge:
+          type: boolean
+          example: true
+        reasoning:
+          type: string
+
+    QuoteItem:
+      type: object
+      properties:
+        quoteId:
+          type: string
+        underwriter:
+          type: string
+        effectiveRate:
+          type: number
+          example: 1.05
+        maxCapacity:
+          type: string
+        validWhile:
+          type: number
+
+    PrepareSwapRequest:
+      type: object
+      required:
+        - quoteId
+        - amount
+        - taker
+      properties:
+        quoteId:
+          type: string
+        amount:
+          type: string
+        taker:
+          type: string
+
+    PrepareSwapResponse:
+      type: object
+      properties:
+        routerAddress:
+          type: string
+        calldata:
+          type: string
+        expectedOut:
+          type: string
+
+    SettlementRecord:
+      type: object
+      properties:
+        txRef:
+          type: string
+        underwriter:
+          type: string
+        buyer:
+          type: string
+        rate:
+          type: string
+        size:
+          type: string
+        timestamp:
+          type: number
+        isSettled:
+          type: boolean
