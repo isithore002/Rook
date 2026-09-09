@@ -1,0 +1,26 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "name": "maker", "type": "address" },
+      { "indexed": true, "name": "strategyHash", "type": "bytes32" },
+      { "indexed": false, "name": "app", "type": "address" },
+      { "indexed": false, "name": "tokens", "type": "address[]" },
+      { "indexed": false, "name": "amounts", "type": "uint256[]" }
+    ],
+    "name": "Shipped",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "name": "maker", "type": "address" },
+      { "indexed": true, "name": "strategyHash", "type": "bytes32" },
+      { "indexed": false, "name": "app", "type": "address" },
+      { "indexed": false, "name": "tokens", "type": "address[]" },
+      { "indexed": false, "name": "amounts", "type": "uint256[]" }
+    ],
+    "name": "Docked",
+    "type": "event"
+  }
+]

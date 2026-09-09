@@ -1,0 +1,51 @@
+specVersion: 1.0.0
+indexerHints:
+  prune: auto
+schema:
+  file: ./schema.graphql
+dataSources:
+  - kind: ethereum
+    name: RookRegistry
+    network: mainnet
+    source:
+      address: "0xEBb2654E241815BbbB8518067D0E6d66E56706d0"
+      abi: RookRegistry
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - CoverageSettled
+        - UnderwriterMetrics
+      abis:
+        - name: RookRegistry
+          file: ./abis/RookRegistry.json
+      eventHandlers:
+        - event: CoverageSettled(indexed bytes32,indexed address,indexed address,uint256,uint256,uint256)
+          handler: handleCoverageSettled
+      file: ./src/mapping.ts
+
+  - kind: ethereum
+    name: Aqua
+    network: mainnet
+    source:
+      address: "0xfF9FA8f363F78f9F5658971A4F357ad95130D1F5"
+      abi: Aqua
+      startBlock: 0
+    mapping:
+      kind: ethereum/events
+      apiVersion: 0.0.9
+      language: wasm/assemblyscript
+      entities:
+        - HedgeOffer
+        - UnderwriterMetrics
+      abis:
+        - name: Aqua
+          file: ./abis/Aqua.json
+      eventHandlers:
+        - event: Shipped(indexed address,indexed bytes32,address,address[],uint256[])
+          handler: handleShipped
+        - event: Docked(indexed address,indexed bytes32,address,address[],uint256[])
+          handler: handleDocked
+      file: ./src/mapping.ts

@@ -1,0 +1,55 @@
+[
+  {
+    "anonymous": false,
+    "inputs": [
+      { "indexed": true, "name": "txRef", "type": "bytes32" },
+      { "indexed": true, "name": "underwriter", "type": "address" },
+      { "indexed": true, "name": "buyer", "type": "address" },
+      { "indexed": false, "name": "rate", "type": "uint256" },
+      { "indexed": false, "name": "size", "type": "uint256" },
+      { "indexed": false, "name": "timestamp", "type": "uint256" }
+    ],
+    "name": "CoverageSettled",
+    "type": "event"
+  },
+  {
+    "inputs": [
+      { "name": "txRef", "type": "bytes32" },
+      { "name": "underwriter", "type": "address" },
+      { "name": "rate", "type": "uint256" },
+      { "name": "size", "type": "uint256" }
+    ],
+    "name": "recordCoverage",
+    "outputs": [
+      {
+        "components": [
+          { "name": "txRef", "type": "bytes32" },
+          { "name": "underwriter", "type": "address" },
+          { "name": "buyer", "type": "address" },
+          { "name": "rate", "type": "uint256" },
+          { "name": "size", "type": "uint256" },
+          { "name": "timestamp", "type": "uint256" },
+          { "name": "blockNumber", "type": "uint256" }
+        ],
+        "name": "",
+        "type": "tuple"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [{ "name": "txRef", "type": "bytes32" }],
+    "name": "hasCoverage",
+    "outputs": [{ "name": "", "type": "bool" }],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "totalCoverages",
+    "outputs": [{ "name": "", "type": "uint256" }],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

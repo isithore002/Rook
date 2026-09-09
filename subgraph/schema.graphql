@@ -1,0 +1,45 @@
+"""
+Rook Subgraph Schema
+Indexes live HedgeOffer positions on Aqua, settled coverages on RookRegistry,
+and computes derived underwriter intelligence for autonomous agents.
+"""
+
+type HedgeOffer @entity {
+  id: ID! # strategyHash or offerId
+  offerId: Bytes!
+  underwriter: Bytes!
+  tokenIn: Bytes!
+  tokenOut: Bytes!
+  rateNumerator: BigInt!
+  rateDenominator: BigInt!
+  effectiveRate: BigDecimal!
+  maxCapacity: BigInt!
+  filledAmount: BigInt!
+  validWhile: BigInt!
+  isRevoked: Boolean!
+  blockNumber: BigInt!
+  timestamp: BigInt!
+}
+
+type CoverageSettled @entity {
+  id: ID! # txRef
+  txRef: Bytes!
+  underwriter: Bytes!
+  buyer: Bytes!
+  rate: BigInt!
+  size: BigInt!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+}
+
+type UnderwriterMetrics @entity {
+  id: ID! # underwriter address
+  underwriter: Bytes!
+  totalOffersShipped: BigInt!
+  totalCoverageSettled: BigInt!
+  totalSettledVolume: BigInt!
+  averageRate: BigDecimal!
+  activeOffersCount: BigInt!
+  lastSettlementTimestamp: BigInt!
+}
