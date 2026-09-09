@@ -33,13 +33,18 @@ type CoverageSettled @entity {
   transactionHash: Bytes!
 }
 
-type UnderwriterMetrics @entity {
+type UnderwriterExecutionProfile @entity {
   id: ID! # underwriter address
   underwriter: Bytes!
   totalOffersShipped: BigInt!
+  totalOffersRepriced: BigInt!
+  totalOffersCancelled: BigInt!
   totalCoverageSettled: BigInt!
   totalSettledVolume: BigInt!
-  averageRate: BigDecimal!
+  averageSpreadBps: BigInt!
+  fillReliabilityScore: BigDecimal! # 0.0 - 1.0 (settled / (settled + cancelled))
+  reputationTier: String! # TIER_1_PRIME, TIER_2_STANDARD, TIER_3_VOLATILE
   activeOffersCount: BigInt!
   lastSettlementTimestamp: BigInt!
+  lastActiveBlock: BigInt!
 }

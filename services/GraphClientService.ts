@@ -15,20 +15,24 @@ export interface SubgraphHedgeOffer {
   isRevoked: boolean;
 }
 
-export interface SubgraphUnderwriterMetrics {
+export interface SubgraphUnderwriterProfile {
   underwriter: string;
   totalOffersShipped: string;
+  totalOffersRepriced: string;
+  totalOffersCancelled: string;
   totalCoverageSettled: string;
   totalSettledVolume: string;
-  averageRate: string;
+  averageSpreadBps: string;
+  fillReliabilityScore: string;
+  reputationTier: string;
   activeOffersCount: string;
   lastSettlementTimestamp: string;
 }
 
 /**
  * GraphClientService
- * Queries The Graph Subgraph endpoint for live HedgeOffers and derived UnderwriterMetrics.
- * If endpoint is not connected, falls back to the on-chain indexed snapshot.
+ * Queries The Graph Subgraph endpoint for live HedgeOffers and derived UnderwriterExecutionProfiles.
+ * Derives intelligent quote filtering based on underwriter reliability and execution history.
  */
 export class GraphClientService {
   private readonly subgraphEndpoint: string;
@@ -38,11 +42,12 @@ export class GraphClientService {
   }
 
   /**
-   * GraphQL Query to retrieve active hedge offers and underwriter intelligence
+   * GraphQL Query to retrieve active hedge offers and underwriter execution profiles
+   * Filters out unreliable underwriters based on derived Graph intelligence.
    */
-  public async getActiveHedgeOffers(): Promise<HedgeQuote[]> {
+  public async getVettedActiveOffers(minReliabilityScore = 0.5): Promise<HedgeQuote[]> {
     const query = `
-      query GetActiveOffers {
+      query GetVettedOffers {
         hedgeOffers(where: { isRevoked: false }, orderBy: effectiveRate, orderDirection: asc) {
           id
           offerId
@@ -55,12 +60,16 @@ export class GraphClientService {
           validWhile
           isRevoked
         }
-        underwriterMetrics {
+        underwriterExecutionProfiles {
           id
           underwriter
           totalOffersShipped
+          totalOffersRepriced
+          totalOffersCancelled
           totalCoverageSettled
           totalSettledVolume
+          fillReliabilityScore
+          reputationTier
           activeOffersCount
         }
       }
@@ -74,19 +83,42 @@ export class GraphClientService {
       });
 
       if (response.ok) {
-        const json = (await response.json()) as { data?: { hedgeOffers?: SubgraphHedgeOffer[] } };
+        const json = (await response.json()) as {
+          data?: {
+            hedgeOffers?: SubgraphHedgeOffer[];
+            underwriterExecutionProfiles?: SubgraphUnderwriterProfile[];
+          };
+        };
+
+        const profiles = new Map<string, SubgraphUnderwriterProfile>();
+        if (json.data?.underwriterExecutionProfiles) {
+          for (const p of json.data.underwriterExecutionProfiles) {
+            profiles.set(p.underwriter.toLowerCase(), p);
+          }
+        }
+
         if (json.data?.hedgeOffers) {
-          return json.data.hedgeOffers.map((o) => ({
-            quoteId: o.id,
-            underwriter: o.underwriter,
-            underwriterName: `Underwriter-${o.underwriter.slice(0, 6)}`,
-            rateMultiplier: BigInt(o.rateNumerator),
-            rateDivider: BigInt(o.rateDenominator),
-            effectiveRate: parseFloat(o.effectiveRate),
-            maxCapacity: BigInt(o.maxCapacity),
-            validWhile: parseInt(o.validWhile, 10),
-            strategyHash: o.offerId,
-          }));
+          return json.data.hedgeOffers
+            .filter((o) => {
+              const p = profiles.get(o.underwriter.toLowerCase());
+              // If underwriter has a profile, ensure reliability exceeds threshold
+              if (p) {
+                const score = parseFloat(p.fillReliabilityScore);
+                return score >= minReliabilityScore;
+              }
+              return true; // New underwriter with baseline allowance
+            })
+            .map((o) => ({
+              quoteId: o.id,
+              underwriter: o.underwriter,
+              underwriterName: `Underwriter-${o.underwriter.slice(0, 6)}`,
+              rateMultiplier: BigInt(o.rateNumerator),
+              rateDivider: BigInt(o.rateDenominator),
+              effectiveRate: parseFloat(o.effectiveRate),
+              maxCapacity: BigInt(o.maxCapacity),
+              validWhile: parseInt(o.validWhile, 10),
+              strategyHash: o.offerId,
+            }));
         }
       }
     } catch {

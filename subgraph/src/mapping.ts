@@ -9,7 +9,7 @@ import {
 import {
   CoverageSettled,
   HedgeOffer,
-  UnderwriterMetrics
+  UnderwriterExecutionProfile
 } from "../generated/schema";
 
 /**
@@ -30,26 +30,48 @@ export function handleCoverageSettled(event: CoverageSettledEvent): void {
 
   settlement.save();
 
-  // Update derived underwriter metrics
+  // Update derived underwriter execution profile
   let underwriterId = event.params.underwriter.toHexString();
-  let metrics = UnderwriterMetrics.load(underwriterId);
+  let profile = UnderwriterExecutionProfile.load(underwriterId);
 
-  if (metrics == null) {
-    metrics = new UnderwriterMetrics(underwriterId);
-    metrics.underwriter = event.params.underwriter;
-    metrics.totalOffersShipped = BigInt.fromI32(0);
-    metrics.totalCoverageSettled = BigInt.fromI32(0);
-    metrics.totalSettledVolume = BigInt.fromI32(0);
-    metrics.averageRate = BigDecimal.fromString("1.0");
-    metrics.activeOffersCount = BigInt.fromI32(0);
-    metrics.lastSettlementTimestamp = BigInt.fromI32(0);
+  if (profile == null) {
+    profile = new UnderwriterExecutionProfile(underwriterId);
+    profile.underwriter = event.params.underwriter;
+    profile.totalOffersShipped = BigInt.fromI32(0);
+    profile.totalOffersRepriced = BigInt.fromI32(0);
+    profile.totalOffersCancelled = BigInt.fromI32(0);
+    profile.totalCoverageSettled = BigInt.fromI32(0);
+    profile.totalSettledVolume = BigInt.fromI32(0);
+    profile.averageSpreadBps = BigInt.fromI32(500); // 5% base
+    profile.fillReliabilityScore = BigDecimal.fromString("1.0");
+    profile.reputationTier = "TIER_1_PRIME";
+    profile.activeOffersCount = BigInt.fromI32(0);
+    profile.lastSettlementTimestamp = BigInt.fromI32(0);
+    profile.lastActiveBlock = event.block.number;
   }
 
-  metrics.totalCoverageSettled = metrics.totalCoverageSettled.plus(BigInt.fromI32(1));
-  metrics.totalSettledVolume = metrics.totalSettledVolume.plus(event.params.size);
-  metrics.lastSettlementTimestamp = event.block.timestamp;
+  profile.totalCoverageSettled = profile.totalCoverageSettled.plus(BigInt.fromI32(1));
+  profile.totalSettledVolume = profile.totalSettledVolume.plus(event.params.size);
+  profile.lastSettlementTimestamp = event.block.timestamp;
+  profile.lastActiveBlock = event.block.number;
 
-  metrics.save();
+  // Derive reliability: settled / (settled + cancelled)
+  let totalResolved = profile.totalCoverageSettled.plus(profile.totalOffersCancelled);
+  if (totalResolved.gt(BigInt.fromI32(0))) {
+    let settledDec = profile.totalCoverageSettled.toBigDecimal();
+    let totalDec = totalResolved.toBigDecimal();
+    profile.fillReliabilityScore = settledDec.div(totalDec);
+
+    if (profile.fillReliabilityScore.ge(BigDecimal.fromString("0.75"))) {
+      profile.reputationTier = "TIER_1_PRIME";
+    } else if (profile.fillReliabilityScore.ge(BigDecimal.fromString("0.40"))) {
+      profile.reputationTier = "TIER_2_STANDARD";
+    } else {
+      profile.reputationTier = "TIER_3_VOLATILE";
+    }
+  }
+
+  profile.save();
 }
 
 /**
@@ -88,23 +110,29 @@ export function handleShipped(event: ShippedEvent): void {
 
   offer.save();
 
-  // Update underwriter active count
+  // Update underwriter active count & offer count
   let underwriterId = event.params.maker.toHexString();
-  let metrics = UnderwriterMetrics.load(underwriterId);
-  if (metrics == null) {
-    metrics = new UnderwriterMetrics(underwriterId);
-    metrics.underwriter = event.params.maker;
-    metrics.totalOffersShipped = BigInt.fromI32(0);
-    metrics.totalCoverageSettled = BigInt.fromI32(0);
-    metrics.totalSettledVolume = BigInt.fromI32(0);
-    metrics.averageRate = BigDecimal.fromString("1.05");
-    metrics.activeOffersCount = BigInt.fromI32(0);
-    metrics.lastSettlementTimestamp = BigInt.fromI32(0);
+  let profile = UnderwriterExecutionProfile.load(underwriterId);
+  if (profile == null) {
+    profile = new UnderwriterExecutionProfile(underwriterId);
+    profile.underwriter = event.params.maker;
+    profile.totalOffersShipped = BigInt.fromI32(0);
+    profile.totalOffersRepriced = BigInt.fromI32(0);
+    profile.totalOffersCancelled = BigInt.fromI32(0);
+    profile.totalCoverageSettled = BigInt.fromI32(0);
+    profile.totalSettledVolume = BigInt.fromI32(0);
+    profile.averageSpreadBps = BigInt.fromI32(500);
+    profile.fillReliabilityScore = BigDecimal.fromString("1.0");
+    profile.reputationTier = "TIER_1_PRIME";
+    profile.activeOffersCount = BigInt.fromI32(0);
+    profile.lastSettlementTimestamp = BigInt.fromI32(0);
+    profile.lastActiveBlock = event.block.number;
   }
 
-  metrics.totalOffersShipped = metrics.totalOffersShipped.plus(BigInt.fromI32(1));
-  metrics.activeOffersCount = metrics.activeOffersCount.plus(BigInt.fromI32(1));
-  metrics.save();
+  profile.totalOffersShipped = profile.totalOffersShipped.plus(BigInt.fromI32(1));
+  profile.activeOffersCount = profile.activeOffersCount.plus(BigInt.fromI32(1));
+  profile.lastActiveBlock = event.block.number;
+  profile.save();
 }
 
 /**
@@ -119,10 +147,31 @@ export function handleDocked(event: DockedEvent): void {
     offer.save();
 
     let underwriterId = event.params.maker.toHexString();
-    let metrics = UnderwriterMetrics.load(underwriterId);
-    if (metrics != null && metrics.activeOffersCount.gt(BigInt.fromI32(0))) {
-      metrics.activeOffersCount = metrics.activeOffersCount.minus(BigInt.fromI32(1));
-      metrics.save();
+    let profile = UnderwriterExecutionProfile.load(underwriterId);
+    if (profile != null) {
+      profile.totalOffersCancelled = profile.totalOffersCancelled.plus(BigInt.fromI32(1));
+      if (profile.activeOffersCount.gt(BigInt.fromI32(0))) {
+        profile.activeOffersCount = profile.activeOffersCount.minus(BigInt.fromI32(1));
+      }
+      profile.lastActiveBlock = event.block.number;
+
+      // Recompute reliability
+      let totalResolved = profile.totalCoverageSettled.plus(profile.totalOffersCancelled);
+      if (totalResolved.gt(BigInt.fromI32(0))) {
+        let settledDec = profile.totalCoverageSettled.toBigDecimal();
+        let totalDec = totalResolved.toBigDecimal();
+        profile.fillReliabilityScore = settledDec.div(totalDec);
+
+        if (profile.fillReliabilityScore.ge(BigDecimal.fromString("0.75"))) {
+          profile.reputationTier = "TIER_1_PRIME";
+        } else if (profile.fillReliabilityScore.ge(BigDecimal.fromString("0.40"))) {
+          profile.reputationTier = "TIER_2_STANDARD";
+        } else {
+          profile.reputationTier = "TIER_3_VOLATILE";
+        }
+      }
+
+      profile.save();
     }
   }
 }
