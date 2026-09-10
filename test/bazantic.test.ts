@@ -50,7 +50,9 @@ test("Bazantic Gateway & Recipe Flow", async (t) => {
 
     const apexQuote = quotes.find((q) => q.underwriterName === "ApexHedge");
     assert.ok(apexQuote);
-    assert.strictEqual(apexQuote.effectiveRate, 1.05);
+    // Computed pricing (P1.7): ApexHedge is the cheapest of the three on this ticket.
+    assert.ok(apexQuote.effectiveRate > 1 && apexQuote.effectiveRate < 1.1);
+    assert.ok(quotes.every((q) => q.underwriterName === "ApexHedge" || q.effectiveRate >= apexQuote.effectiveRate));
   });
 
   await t.test("Ingredient 3: prepareHedgeSwap (POST /api/v1/prepare-swap)", async () => {

@@ -70,20 +70,43 @@ test("Rook Off-Chain Pipeline - RiskScoringService & Agents", async (t) => {
     assert.ok(plan.competingQuotes, "Should have competing quotes");
     assert.strictEqual(plan.competingQuotes.length, 3, "All 3 underwriters should quote");
 
-    // Verify best quote selection: Underwriter 2 (ApexHedge at 1.05:1)
+    // Best quote: the competitive underwriter (ApexHedge) wins on this
+    // moderate-size, high-risk ticket. Rate is computed, not hardcoded.
     assert.ok(plan.selectedQuote);
     assert.strictEqual(plan.selectedQuote.underwriterName, "ApexHedge");
-    assert.strictEqual(plan.selectedQuote.effectiveRate, 1.05);
 
-    // Verify other rates
     const u1Quote = plan.competingQuotes.find((q) => q.underwriterName === "AlphaConserv");
     const u3Quote = plan.competingQuotes.find((q) => q.underwriterName === "DeltaDynamic");
+    assert.ok(u1Quote && u3Quote);
 
-    assert.ok(u1Quote);
-    assert.strictEqual(u1Quote.effectiveRate, 1.25);
+    // ApexHedge is strictly the cheapest; all three are distinct and in a sane band.
+    assert.ok(plan.selectedQuote.effectiveRate < u1Quote.effectiveRate);
+    assert.ok(plan.selectedQuote.effectiveRate < u3Quote.effectiveRate);
+    for (const q of plan.competingQuotes) {
+      assert.ok(q.effectiveRate > 1 && q.effectiveRate < 1.4, `rate in band: ${q.effectiveRate}`);
+    }
+    assert.strictEqual(new Set(plan.competingQuotes.map((q) => q.effectiveRate)).size, 3, "distinct rates");
+  });
 
-    assert.ok(u3Quote);
-    assert.ok(u3Quote.effectiveRate > 1.05 && u3Quote.effectiveRate < 1.25);
+  await t.test("Pricing: a large fill flips the winner to the conservative book", async () => {
+    // Same 3 underwriters. A ticket that is a large fraction of ApexHedge's
+    // remaining book triggers its convex inventory penalty; AlphaConserv's
+    // shallow penalty + bigger headroom make it the cheapest here.
+    const txLarge: ProposedTransaction = {
+      txRef: "0x5555555555555555555555555555555555555555555555555555555555555555",
+      sender: actingAgent.address,
+      target: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+      asset: "0xE224621223356f15Cf9618007e7C22477067De69",
+      amount: 28_000n * 10n ** 18n,
+      description: "Large position rotation into a new venue",
+      metadata: { isContract: true, contractVerified: true, ageDays: 400, priorTransfers: 5 },
+    };
+
+    const plan = await actingAgent.evaluateAndPlan(txLarge);
+    assert.strictEqual(plan.hedged, true);
+    assert.strictEqual(plan.selectedQuote?.underwriterName, "AlphaConserv", "conservative wins the large fill");
+    const apex = plan.competingQuotes?.find((q) => q.underwriterName === "ApexHedge");
+    assert.ok(apex && plan.selectedQuote.effectiveRate < apex.effectiveRate);
   });
 
   await t.test("Scenario: tx-risky-02 (Flagged Exploit Address - Hard Block)", async () => {
@@ -150,8 +173,10 @@ test("Rook Off-Chain Pipeline - RiskScoringService & Agents", async (t) => {
     assert.strictEqual(plan.disqualifiedQuotes[0].quote.underwriterName, "BaitSwitchUnderwriter");
     assert.match(plan.disqualifiedQuotes[0].reason, /TIER_3_VOLATILE/);
 
-    // Best vetted quote remains ApexHedge (TIER_1_PRIME)
+    // Best vetted quote remains ApexHedge (TIER_1_PRIME), cheaper than the
+    // remaining vetted competitor.
     assert.strictEqual(plan.selectedQuote?.underwriterName, "ApexHedge");
-    assert.strictEqual(plan.selectedQuote?.effectiveRate, 1.05);
+    const vettedOther = plan.competingQuotes?.find((q) => q.underwriterName !== "ApexHedge");
+    assert.ok(vettedOther && plan.selectedQuote.effectiveRate < vettedOther.effectiveRate);
   });
 });
