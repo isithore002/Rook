@@ -195,6 +195,10 @@ progress (`HANDOFF.md`). Both runs are byte-identical:
 ### Prerequisites
 - Node.js v22+
 - Foundry (`forge`, `anvil`)
+- Contract deps (once): `cd swap-vm && yarn install` then `cd ../aqua && yarn install`.
+  `swap-vm`/`aqua` resolve Solidity imports from `node_modules` (`@1inch/aqua`,
+  `@openzeppelin/contracts`, `forge-std`); `yarn.lock` is committed for pinning.
+  First `forge` build is slow (`via_ir = true`).
 
 ### Run Tests
 ```bash
