@@ -8,7 +8,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test --experimental-strip-types test/agents.test.ts test/bazantic.test.ts test/bazantic_benchmark.test.ts test/demo_rehearsal.ts test/slack_observer.test.ts",
+    "test": "cross-env ROOK_RISK_LLM=off node --test --experimental-strip-types test/agents.test.ts test/bazantic.test.ts test/bazantic_benchmark.test.ts test/demo_rehearsal.ts test/slack_observer.test.ts",
     "test:contracts": "cross-env FOUNDRY_PROFILE=lowmem forge test --root swap-vm",
     "test:contracts:ci": "cross-env FOUNDRY_PROFILE=ci forge test --root swap-vm",
     "build:contracts": "cross-env FOUNDRY_PROFILE=lowmem forge build --root swap-vm --skip test --skip script",
@@ -22,6 +22,7 @@
     "typescript": "^5.7"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "dotenv": "^17.4.2",
     "viem": "^2.56.3"
   }

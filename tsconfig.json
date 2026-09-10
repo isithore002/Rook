@@ -12,5 +12,6 @@
     "forceConsistentCasingInFileNames": true,
     "types": ["node"]
   },
-  "include": ["agents", "services", "test", "subgraph/src"]
+  "//": "subgraph/src is AssemblyScript for The Graph, not Node TS — built by `graph build`, not tsc.",
+  "include": ["agents", "services", "test", "chain", "flow", "scripts"]
 }

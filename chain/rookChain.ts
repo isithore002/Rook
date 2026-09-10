@@ -67,7 +67,7 @@ export class RookChain {
       address: this.d.periphery,
       abi: peripheryAbi,
       functionName: "buildRevocableRateOfferOrder",
-      args: [maker, this.d.riskToken, this.d.safeToken, offerId, rateIn, rateOut, maxSize, BigInt(validWhile)],
+      args: [maker, this.d.riskToken, this.d.safeToken, offerId, rateIn, rateOut, maxSize, validWhile],
     })) as unknown as [BuiltOrder["order"], Hex];
     return { order, strategyBytes };
   }
