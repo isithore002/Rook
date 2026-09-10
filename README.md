@@ -138,26 +138,39 @@ Each sponsor owns a strictly non-overlapping, load-bearing capability that passe
 
 ---
 
-## 7. The 10 Verified Security & Economic Invariants
+## 7. The 10 Security & Economic Invariants
+
+**Evidence state (see `CLAUDE.md` §1).** Every row below has a passing automated
+test. The Solidity rows execute the *real* Aqua Core + `AquaSwapVMRouter` +
+custom opcode `0x55` + `RookRegistry` + `AgentHedgeExecutor` inside Foundry's
+EVM — real contracts, real swaps, real on-chain state reads — which earns
+**TESTED**. Promoting them to **FORK-VERIFIED** requires the same flow against a
+persistent Anvil node from clean process state, capturing real transaction
+hashes; that end-to-end runner is in progress and tracked in `HANDOFF.md`.
 
 | # | Invariant | Verification Contract & Test | Status |
 |---|---|---|---|
-| **1** | Accepted offer terms cannot change during fill | `VerifyDay4Fork.t.sol::test_Day4_Invariant1_6_9_SuccessfulProtectedExecution` | **FORK-VERIFIED** 🟢 |
-| **2** | Revocation / repricing authority belongs strictly to maker | `VerifyDay4Fork.t.sol::test_Day4_Invariant2_MakerAuthorityOnly` | **FORK-VERIFIED** 🟢 |
-| **3** | `filledAmount` can never exceed `maxSize` | `VerifyDay4Fork.t.sol::test_Day4_Invariant3_CapacityEnforced` | **FORK-VERIFIED** 🟢 |
-| **4** | Expired / revoked offers revert deterministically | `VerifyDay4Fork.t.sol::test_Day4_Invariant4_ExpiredOrRevokedOffersRevert` | **FORK-VERIFIED** 🟢 |
-| **5** | Insufficient Aqua liquidity reverts | `VerifyDay4Fork.t.sol::test_Day4_Invariant5_InsufficientAquaLiquidityReverts` | **FORK-VERIFIED** 🟢 |
-| **6** | **Failed hedge CANNOT fall through into unhedged execution** | `VerifyDay4Fork.t.sol::test_Day4_Invariant6_FailedHedgeCannotFallThrough` (target execution count = 0) | **FORK-VERIFIED** 🟢 |
+| **1** | Accepted offer terms cannot change during fill | `VerifyDay4Fork.t.sol::test_Day4_Invariant1_6_9_SuccessfulProtectedExecution` | **TESTED** 🟢 |
+| **2** | Revocation / repricing authority belongs strictly to maker | `VerifyDay4Fork.t.sol::test_Day4_Invariant2_MakerAuthorityOnly` | **TESTED** 🟢 |
+| **3** | `filledAmount` can never exceed `maxSize` | `VerifyDay4Fork.t.sol::test_Day4_Invariant3_CapacityEnforced` | **TESTED** 🟢 |
+| **4** | Expired / revoked offers revert deterministically | `VerifyDay4Fork.t.sol::test_Day4_Invariant4_ExpiredOrRevokedOffersRevert` | **TESTED** 🟢 |
+| **5** | Insufficient Aqua liquidity reverts | `VerifyDay4Fork.t.sol::test_Day4_Invariant5_InsufficientAquaLiquidityReverts` | **TESTED** 🟢 |
+| **6** | **Failed hedge CANNOT fall through into unhedged execution** | `VerifyDay4Fork.t.sol::test_Day4_Invariant6_FailedHedgeCannotFallThrough` (target execution count = 0) | **TESTED** 🟢 |
 | **7** | Graph reputation influences quote selection | `test/agents.test.ts` (disqualifies `TIER_3_VOLATILE` underwriters) | **TESTED** 🟢 |
 | **8** | Bazantic Recipe executes full multi-step workflow | `test/bazantic_benchmark.test.ts` (100% Recipe completion vs. 0% unguided) | **TESTED** 🟢 |
-| **9** | Successful settlement produces verifiable on-chain state | `VerifyDay4Fork.t.sol` (`CoverageSettled` on `RookRegistry`) | **FORK-VERIFIED** 🟢 |
-| **10**| `tx-risky-02` demonstrably fails closed | `VerifyDay4Fork.t.sol::test_Day4_Invariant10_TxRisky02_FailsClosed` | **FORK-VERIFIED** 🟢 |
+| **9** | Successful settlement produces verifiable on-chain state | `VerifyDay4Fork.t.sol` (`CoverageSettled` on `RookRegistry`) | **TESTED** 🟢 |
+| **10**| `tx-risky-02` demonstrably fails closed | `VerifyDay4Fork.t.sol::test_Day4_Invariant10_TxRisky02_FailsClosed` | **TESTED** 🟢 |
 
 ---
 
-## 8. Dual Back-to-Back Demo Rehearsal Results
+## 8. Back-to-Back Demo Rehearsal Results
 
-Executed via `test/demo_rehearsal.ts` across two independent, clean-state runs:
+Executed via `test/demo_rehearsal.ts` as two back-to-back runs of the **off-chain
+pipeline** (risk scoring → Graph-profile vetting → quote selection → Bazantic
+Recipe sequencing). At this layer the Aqua fill and `RookRegistry` settlement are
+represented by the gateway, not executed on a node; the live-node end-to-end
+runner that drives real swaps and asserts on real `CoverageSettled` logs is in
+progress (`HANDOFF.md`). Both runs are byte-identical:
 
 ```json
 {
@@ -185,14 +198,16 @@ Executed via `test/demo_rehearsal.ts` across two independent, clean-state runs:
 
 ### Run Tests
 ```bash
-# 1. Start local Anvil fork
-anvil --port 8545
+# Solidity: real Aqua + SwapVM 0x55 + RookRegistry + AgentHedgeExecutor,
+# executed in Foundry's EVM (no external node required).
+# 26 Rook tests across 6 suites (RevocableRateOffer, RookRegistry, VerifyDay1-4).
+npm run test:contracts
+#   or: forge test --root swap-vm
 
-# 2. Run Foundry on-chain fork verification suite (8 tests)
-cd swap-vm
-forge test --fork-url http://127.0.0.1:8545 --match-contract VerifyDay4ForkTest -vvv
+# Off-chain pipeline: agents, risk scoring, Bazantic gateway/recipe,
+# benchmark, back-to-back rehearsal. 20 tests.
+npm test
 
-# 3. Run full TypeScript suite (16 tests, including Bazantic benchmark & dual rehearsal)
-cd ..
-node --experimental-strip-types --test test/agents.test.ts test/bazantic.test.ts test/bazantic_benchmark.test.ts test/demo_rehearsal.ts
+# Both:
+npm run test:all
 ```

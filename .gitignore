@@ -1,4 +1,6 @@
+# Internal planning/operating docs stay local; the judge-facing README ships.
 *.md
+!README.md
 node_modules/
 **/node_modules/
 artifacts/

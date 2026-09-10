@@ -1,0 +1,20 @@
+{
+  "name": "rook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Real-time competitive pre-execution hedging market for autonomous agents",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --experimental-strip-types test/agents.test.ts test/bazantic.test.ts test/bazantic_benchmark.test.ts test/demo_rehearsal.ts test/slack_observer.test.ts",
+    "test:contracts": "forge test --root swap-vm",
+    "test:all": "npm run test:contracts && npm run test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7"
+  }
+}
