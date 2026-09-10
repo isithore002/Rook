@@ -44,8 +44,6 @@ export interface LiveScenarioTrace {
   outcome: LiveOutcome;
 }
 
-const HOUR = 3600;
-
 function offerIdFor(underwriter: Address, txRef: Hex): Hex {
   return keccak256(encodePacked(["address", "bytes32"], [underwriter, txRef]));
 }
@@ -89,7 +87,8 @@ export async function runScenarioLive(opts: RunScenarioOpts): Promise<LiveScenar
   }
 
   // 1. Every underwriter with enough capacity ships a real position.
-  const validWhile = Math.floor(Date.now() / 1000) + HOUR;
+  // Hour-snapped expiry so back-to-back demo runs are byte-reproducible.
+  const validWhile = await chain.validWhile(1);
   const shippedByUw = new Map<string, { offer: ShippedOffer; quote: HedgeQuote }>();
   for (const uw of underwriters) {
     const quote = uw.generateQuote(tx, risk);

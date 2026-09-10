@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 import { BazanticGatewayServer } from "../services/BazanticGatewayServer.ts";
+import { fakeSettlement } from "./fakeSettlement.ts";
 
 /**
  * Bazantic Before-and-After Comparative Benchmark
@@ -12,7 +13,8 @@ import { BazanticGatewayServer } from "../services/BazanticGatewayServer.ts";
  * - Condition B: AI Agent executing published SecureTransactionHedgeRecipe
  */
 test("Bazantic Before-and-After Comparative Benchmark", async (t) => {
-  const server = new BazanticGatewayServer(3002);
+  const SETTLED_FIXTURE = "0x2222222222222222222222222222222222222222222222222222222222222222";
+  const server = new BazanticGatewayServer({ port: 3002, settlementLookup: fakeSettlement([SETTLED_FIXTURE]) });
   await server.start();
 
   t.after(async () => {

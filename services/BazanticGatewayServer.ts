@@ -3,6 +3,22 @@ import { RiskScoringService } from "./RiskScoringService.ts";
 import { UnderwriterAgent } from "../agents/UnderwriterAgent.ts";
 import type { ProposedTransaction } from "../agents/types.ts";
 
+export interface SettlementInfo {
+  isSettled: boolean;
+  underwriter?: string;
+  rate?: string;
+  size?: string;
+  timestamp?: number;
+}
+
+/** Resolves a txRef to real settlement state. The demo injects a RookRegistry-backed lookup. */
+export type SettlementLookup = (txRef: string) => Promise<SettlementInfo>;
+
+export interface GatewayOpts {
+  port?: number;
+  settlementLookup?: SettlementLookup;
+}
+
 /**
  * Bazantic Gateway Server
  * Implements the OpenAPI 3.0 endpoints and x402 machine payment verification
@@ -13,9 +29,13 @@ export class BazanticGatewayServer {
   private readonly port: number;
   private readonly riskService: RiskScoringService;
   private readonly underwriters: UnderwriterAgent[];
+  private readonly settlementLookup: SettlementLookup;
 
-  constructor(port = 3000) {
-    this.port = port;
+  constructor(portOrOpts: number | GatewayOpts = 3000) {
+    const opts: GatewayOpts = typeof portOrOpts === "number" ? { port: portOrOpts } : portOrOpts;
+    this.port = opts.port ?? 3000;
+    // Default: never report a settlement without evidence (CLAUDE.md §3.8).
+    this.settlementLookup = opts.settlementLookup ?? (async () => ({ isSettled: false }));
     this.riskService = new RiskScoringService();
     this.underwriters = [
       new UnderwriterAgent("0x2221000000000000000000000000000000000001", "AlphaConserv", "conservative"),
@@ -127,16 +147,9 @@ export class BazanticGatewayServer {
       // 4. GET /api/v1/settlement/:txRef (Ingredient: verifySettlementProof)
       if (pathname.startsWith("/api/v1/settlement/") && method === "GET") {
         const txRef = pathname.replace("/api/v1/settlement/", "").toLowerCase();
-        const isSettled = txRef === "0x2222222222222222222222222222222222222222222222222222222222222222";
+        const info = await this.settlementLookup(txRef);
         res.writeHead(200, { "Content-Type": "application/json" });
-        res.end(
-          JSON.stringify({
-            txRef,
-            registryAddress: "0xEBb2654E241815BbbB8518067D0E6d66E56706d0",
-            isSettled,
-            timestamp: isSettled ? Math.floor(Date.now() / 1000) : 0,
-          })
-        );
+        res.end(JSON.stringify({ txRef, ...info }));
         return;
       }
 

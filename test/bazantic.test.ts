@@ -1,9 +1,11 @@
 import assert from "node:assert";
 import test from "node:test";
 import { BazanticGatewayServer } from "../services/BazanticGatewayServer.ts";
+import { fakeSettlement } from "./fakeSettlement.ts";
 
 test("Bazantic Gateway & Recipe Flow", async (t) => {
-  const server = new BazanticGatewayServer(3001);
+  const KNOWN_SETTLED = "0x2222222222222222222222222222222222222222222222222222222222222222";
+  const server = new BazanticGatewayServer({ port: 3001, settlementLookup: fakeSettlement([KNOWN_SETTLED]) });
   await server.start();
 
   t.after(async () => {
@@ -75,12 +77,12 @@ test("Bazantic Gateway & Recipe Flow", async (t) => {
   });
 
   await t.test("Ingredient 4: verifySettlementProof (GET /api/v1/settlement/:txRef)", async () => {
-    const txRef = "0x2222222222222222222222222222222222222222222222222222222222222222";
-    const res = await fetch(`http://localhost:3001/api/v1/settlement/${txRef}`);
-    assert.strictEqual(res.status, 200);
+    const settled = await (await fetch(`http://localhost:3001/api/v1/settlement/${KNOWN_SETTLED}`)).json() as { txRef: string; isSettled: boolean };
+    assert.strictEqual(settled.txRef, KNOWN_SETTLED);
+    assert.strictEqual(settled.isSettled, true);
 
-    const data = (await res.json()) as { txRef: string; isSettled: boolean };
-    assert.strictEqual(data.txRef, txRef);
-    assert.strictEqual(data.isSettled, true);
+    const unknown = "0x8888888888888888888888888888888888888888888888888888888888888888";
+    const notSettled = await (await fetch(`http://localhost:3001/api/v1/settlement/${unknown}`)).json() as { isSettled: boolean };
+    assert.strictEqual(notSettled.isSettled, false, "no settlement without evidence");
   });
 });

@@ -53,6 +53,23 @@ export class RookChain {
     return keyIndexForAddress(this.d, addr);
   }
 
+  /** Latest block timestamp. */
+  async chainNow(): Promise<number> {
+    const block = await this.pub.getBlock({ blockTag: "latest" });
+    return Number(block.timestamp);
+  }
+
+  /**
+   * An offer expiry `hoursAhead` from now, snapped up to the next hour boundary.
+   * Anvil tracks `block.timestamp` to wall clock, so snapping keeps the encoded
+   * order bytes (and therefore every downstream tx hash) identical across two
+   * back-to-back demo runs.
+   */
+  async validWhile(hoursAhead = 1): Promise<number> {
+    const target = (await this.chainNow()) + hoursAhead * 3600;
+    return Math.ceil(target / 3600) * 3600;
+  }
+
   // --- builders (pure, via the periphery contract) ---
 
   async buildOrder(

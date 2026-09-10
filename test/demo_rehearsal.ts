@@ -1,6 +1,7 @@
 import assert from "node:assert";
 import test from "node:test";
 import { BazanticGatewayServer } from "../services/BazanticGatewayServer.ts";
+import { fakeSettlement } from "./fakeSettlement.ts";
 import { RiskScoringService } from "../services/RiskScoringService.ts";
 import { UnderwriterAgent } from "../agents/UnderwriterAgent.ts";
 import { ActingAgent } from "../agents/ActingAgent.ts";
@@ -33,12 +34,16 @@ export interface DemoRunTrace {
   };
 }
 
+const RISKY_TXREF = "0x2222222222222222222222222222222222222222222222222222222222222222";
+
 /**
- * Execute a complete end-to-end demo run across all 3 sponsors:
- * The Graph (intelligence) -> Bazantic (recipe/gateway/x402) -> 1inch Aqua (SwapVM 0x55 settlement)
+ * Off-chain pipeline rehearsal: risk scoring -> Graph-profile vetting -> quote
+ * selection -> Bazantic Recipe sequencing, run twice and compared for
+ * determinism. On-chain settlement is faked here (`fakeSettlement`); the real
+ * fresh-fork end-to-end proof with real RookRegistry reads is `npm run demo`.
  */
 async function executeFullDemoRun(runId: string, port: number): Promise<DemoRunTrace> {
-  const server = new BazanticGatewayServer(port);
+  const server = new BazanticGatewayServer({ port, settlementLookup: fakeSettlement([RISKY_TXREF]) });
   await server.start();
 
   try {

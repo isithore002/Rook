@@ -13,7 +13,8 @@
     "test:contracts:ci": "cross-env FOUNDRY_PROFILE=ci forge test --root swap-vm",
     "build:contracts": "cross-env FOUNDRY_PROFILE=lowmem forge build --root swap-vm --skip test --skip script",
     "test:all": "npm run test:contracts && npm run test",
-    "e2e": "npm run build:contracts && node --experimental-strip-types scripts/e2e-live.ts",
+    "e2e": "npm run build:contracts && cross-env ROOK_RISK_LLM=off node --experimental-strip-types scripts/e2e-live.ts",
+    "demo": "npm run build:contracts && cross-env ROOK_RISK_LLM=off node --experimental-strip-types scripts/demo.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
