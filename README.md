@@ -214,4 +214,18 @@ npm test
 
 # Both:
 npm run test:all
+
+# LIVE end-to-end: spins up a fresh Anvil node, deploys the full stack,
+# and drives all 3 MOCKS.md scenarios through the real agents ->
+# real SwapVM 0x55 fills -> real RookRegistry settlement, with real
+# transaction hashes. Reproducible (settlement consistently at block 26).
+npm run e2e
 ```
+
+> Build note: this repo's canonical Foundry profile is `via_ir` +
+> `optimizer_runs = 700`. `npm run test:contracts` / `npm run e2e` use a
+> `lowmem` profile (`optimizer_runs = 1`, Yul steps off) that trades gas
+> optimisation for a build that fits in ~2 GB of RAM; CI uses
+> `npm run test:contracts:ci` at the canonical settings. Because `lowmem`
+> bytecode runs large, `npm run e2e` launches Anvil with
+> `--disable-code-size-limit`.
