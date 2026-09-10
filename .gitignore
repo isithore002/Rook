@@ -11,6 +11,8 @@ cache/
 **/cache/
 broadcast/
 **/broadcast/
+deployments/
+**/deployments/
 coverage/
 **/coverage/
 .env*

@@ -9,12 +9,20 @@
   },
   "scripts": {
     "test": "node --test --experimental-strip-types test/agents.test.ts test/bazantic.test.ts test/bazantic_benchmark.test.ts test/demo_rehearsal.ts test/slack_observer.test.ts",
-    "test:contracts": "forge test --root swap-vm",
+    "test:contracts": "cross-env FOUNDRY_PROFILE=lowmem forge test --root swap-vm",
+    "test:contracts:ci": "cross-env FOUNDRY_PROFILE=ci forge test --root swap-vm",
+    "build:contracts": "cross-env FOUNDRY_PROFILE=lowmem forge build --root swap-vm --skip test --skip script",
     "test:all": "npm run test:contracts && npm run test",
+    "e2e": "npm run build:contracts && node --experimental-strip-types scripts/e2e-live.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22",
+    "cross-env": "^10.1.0",
     "typescript": "^5.7"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "viem": "^2.56.3"
   }
 }

@@ -21,3 +21,15 @@ solc_version   = "0.8.30"
 optimizer      = true
 optimizer_runs = 700
 via_ir         = true
+
+# Low-memory build profile: keeps via_ir codegen (SwapVM.sol needs it for
+# stack depth) but disables the Yul optimizer steps, which otherwise OOM solc
+# on <8GB-free machines. Bytecode runs large -> anvil needs --disable-code-size-limit.
+[profile.lowmem]
+solc_version   = "0.8.30"
+optimizer      = true
+optimizer_runs = 1
+via_ir         = true
+
+[profile.lowmem.optimizer_details.yulDetails]
+optimizerSteps = ""
