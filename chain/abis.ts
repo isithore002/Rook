@@ -37,6 +37,16 @@ export const aquaAbi = [
     ],
     outputs: [],
   },
+  {
+    // Real Aqua event — no indexed fields; `strategy` is abi.encode(Order).
+    type: "event", name: "Shipped",
+    inputs: [
+      { name: "maker", type: "address", indexed: false },
+      { name: "app", type: "address", indexed: false },
+      { name: "strategyHash", type: "bytes32", indexed: false },
+      { name: "strategy", type: "bytes", indexed: false },
+    ],
+  },
 ] as const;
 
 export const routerAbi = [
@@ -47,6 +57,22 @@ export const routerAbi = [
   },
   { type: "function", name: "repriceOffer", stateMutability: "nonpayable", inputs: [{ name: "offerId", type: "bytes32" }, { name: "newRateIn", type: "uint64" }, { name: "newRateOut", type: "uint64" }], outputs: [] },
   { type: "function", name: "cancelOffer", stateMutability: "nonpayable", inputs: [{ name: "offerId", type: "bytes32" }], outputs: [] },
+  {
+    type: "event", name: "OfferRevoked",
+    inputs: [
+      { name: "maker", type: "address", indexed: true },
+      { name: "offerId", type: "bytes32", indexed: true },
+    ],
+  },
+  {
+    type: "event", name: "OfferRepriced",
+    inputs: [
+      { name: "maker", type: "address", indexed: true },
+      { name: "offerId", type: "bytes32", indexed: true },
+      { name: "newRateIn", type: "uint64", indexed: false },
+      { name: "newRateOut", type: "uint64", indexed: false },
+    ],
+  },
   {
     type: "function", name: "getOfferState", stateMutability: "view",
     inputs: [{ name: "maker", type: "address" }, { name: "offerId", type: "bytes32" }],

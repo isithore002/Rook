@@ -10,13 +10,15 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { createPublicClient, http, type Address } from "viem";
 
+import { keccak256, toHex } from "viem";
 import { RiskScoringService } from "../services/RiskScoringService.ts";
 import { UnderwriterAgent } from "../agents/UnderwriterAgent.ts";
 import { ActingAgent } from "../agents/ActingAgent.ts";
 import { RookChain } from "../chain/rookChain.ts";
+import { RookIndexer } from "../services/RookIndexer.ts";
+import { publicClient } from "../chain/config.ts";
 import { deploy } from "./deploy.ts";
 import { runScenarioLive, type LiveScenarioTrace } from "../flow/runScenarioLive.ts";
-import type { SubgraphUnderwriterProfile } from "../services/GraphClientService.ts";
 import type { ProposedTransaction } from "../agents/types.ts";
 
 const PORT = Number(process.env.RPC_URL?.split(":").pop() || 8545);
@@ -69,14 +71,31 @@ async function main(): Promise<void> {
   ];
   const actingAgent = new ActingAgent(d.actingAgent, riskService, underwriters);
 
-  // Graph-derived profile: mark DeltaDynamic volatile so vetting disqualifies it live.
-  const volatile: SubgraphUnderwriterProfile = {
-    underwriter: u3, totalOffersShipped: "10", totalOffersRepriced: "9", totalOffersCancelled: "8",
-    totalCoverageSettled: "1", totalSettledVolume: "1", averageSpreadBps: "300",
-    fillReliabilityScore: "0.11", reputationTier: "TIER_3_VOLATILE", activeOffersCount: "1",
-    lastSettlementTimestamp: "1700000000",
-  };
-  actingAgent.setUnderwriterProfile(u3, volatile);
+  // --- Build REAL underwriter history on-chain, then derive profiles from it ---
+  // DeltaDynamic (u3) behaves badly: ships and immediately revokes 3 offers,
+  // never settling. AlphaConserv / ApexHedge ship and reprice (no revokes).
+  const soon = Math.floor(Date.now() / 1000) + 3600;
+  for (let i = 0; i < 3; i++) {
+    const bad = keccak256(toHex(`warmup-bad-${i}`));
+    await chain.shipOffer(u3, bad, 10800n, 10000n, 1000n * 10n ** 18n, soon);
+    await chain.cancelOffer(u3, bad);
+  }
+  for (const good of [u1, u2]) {
+    const id = keccak256(toHex(`warmup-good-${good}`));
+    await chain.shipOffer(good, id, 10400n, 10000n, 2000n * 10n ** 18n, soon);
+    await chain.repriceOffer(good, id, 10350n, 10000n);
+  }
+
+  const indexer = new RookIndexer(publicClient(), d);
+  await indexer.sync();
+  for (const uw of [u1, u2, u3]) {
+    const prof = indexer.getUnderwriterProfile(uw);
+    if (prof) actingAgent.setUnderwriterProfile(uw, prof);
+  }
+  const u3prof = indexer.getUnderwriterProfile(u3);
+  console.log(`[e2e] indexed DeltaDynamic profile: reliability=${u3prof?.fillReliabilityScore} tier=${u3prof?.reputationTier} (cancelled=${u3prof?.totalOffersCancelled}, settled=${u3prof?.totalCoverageSettled})`);
+  assert(u3prof?.reputationTier === "TIER_3_VOLATILE", "indexer must derive DeltaDynamic as volatile from real cancel history");
+  assert(indexer.getUnderwriterProfile(u1)?.reputationTier === "TIER_1_PRIME", "AlphaConserv must be prime (no revokes)");
 
   const traces: LiveScenarioTrace[] = [];
 

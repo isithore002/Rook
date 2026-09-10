@@ -1,6 +1,7 @@
-# Internal planning/operating docs stay local; the judge-facing README ships.
+# Internal planning/operating docs stay local; judge-facing READMEs ship.
 *.md
 !/README.md
+!/subgraph/README.md
 node_modules/
 **/node_modules/
 artifacts/
