@@ -140,53 +140,63 @@ Each sponsor owns a strictly non-overlapping, load-bearing capability that passe
 
 ## 7. The 10 Security & Economic Invariants
 
-**Evidence state (see `CLAUDE.md` §1).** Every row below has a passing automated
-test. The Solidity rows execute the *real* Aqua Core + `AquaSwapVMRouter` +
-custom opcode `0x55` + `RookRegistry` + `AgentHedgeExecutor` inside Foundry's
-EVM — real contracts, real swaps, real on-chain state reads — which earns
-**TESTED**. Promoting them to **FORK-VERIFIED** requires the same flow against a
-persistent Anvil node from clean process state, capturing real transaction
-hashes; that end-to-end runner is in progress and tracked in `HANDOFF.md`.
+**Evidence state (see `CLAUDE.md` §1).** **FORK-VERIFIED** rows execute against a
+freshly-spawned Anvil node from clean process state via `npm run demo`, with
+real transaction hashes and on-chain state re-read independently — not Foundry's
+in-process EVM. **TESTED** rows (failure-path / adversarial cases not exercised
+by the live happy-path demo) are proven by `VerifyDay4Fork.t.sol` against the
+real contracts inside Foundry's EVM.
 
-| # | Invariant | Verification Contract & Test | Status |
+| # | Invariant | Verification | Status |
 |---|---|---|---|
-| **1** | Accepted offer terms cannot change during fill | `VerifyDay4Fork.t.sol::test_Day4_Invariant1_6_9_SuccessfulProtectedExecution` | **TESTED** 🟢 |
-| **2** | Revocation / repricing authority belongs strictly to maker | `VerifyDay4Fork.t.sol::test_Day4_Invariant2_MakerAuthorityOnly` | **TESTED** 🟢 |
-| **3** | `filledAmount` can never exceed `maxSize` | `VerifyDay4Fork.t.sol::test_Day4_Invariant3_CapacityEnforced` | **TESTED** 🟢 |
-| **4** | Expired / revoked offers revert deterministically | `VerifyDay4Fork.t.sol::test_Day4_Invariant4_ExpiredOrRevokedOffersRevert` | **TESTED** 🟢 |
-| **5** | Insufficient Aqua liquidity reverts | `VerifyDay4Fork.t.sol::test_Day4_Invariant5_InsufficientAquaLiquidityReverts` | **TESTED** 🟢 |
-| **6** | **Failed hedge CANNOT fall through into unhedged execution** | `VerifyDay4Fork.t.sol::test_Day4_Invariant6_FailedHedgeCannotFallThrough` (target execution count = 0) | **TESTED** 🟢 |
-| **7** | Graph reputation influences quote selection | `test/agents.test.ts` (disqualifies `TIER_3_VOLATILE` underwriters) | **TESTED** 🟢 |
-| **8** | Bazantic Recipe executes full multi-step workflow | `test/bazantic_benchmark.test.ts` (100% Recipe completion vs. 0% unguided) | **TESTED** 🟢 |
-| **9** | Successful settlement produces verifiable on-chain state | `VerifyDay4Fork.t.sol` (`CoverageSettled` on `RookRegistry`) | **TESTED** 🟢 |
-| **10**| `tx-risky-02` demonstrably fails closed | `VerifyDay4Fork.t.sol::test_Day4_Invariant10_TxRisky02_FailsClosed` | **TESTED** 🟢 |
+| **1** | Accepted offer terms cannot change during fill | `npm run demo` (real ship → real fill, same encoded order) | **FORK-VERIFIED** 🟢 |
+| **2** | Revocation / repricing authority belongs strictly to maker | `VerifyDay4Fork.t.sol::test_Day4_Invariant2_MakerAuthorityOnly` | TESTED 🟡 |
+| **3** | `filledAmount` can never exceed `maxSize` | `VerifyDay4Fork.t.sol::test_Day4_Invariant3_CapacityEnforced` | TESTED 🟡 |
+| **4** | Expired / revoked offers revert deterministically | `VerifyDay4Fork.t.sol::test_Day4_Invariant4_ExpiredOrRevokedOffersRevert` | TESTED 🟡 |
+| **5** | Insufficient Aqua liquidity reverts | `VerifyDay4Fork.t.sol::test_Day4_Invariant5_InsufficientAquaLiquidityReverts` | TESTED 🟡 |
+| **6** | **Failed hedge CANNOT fall through into unhedged execution** | `VerifyDay4Fork.t.sol::test_Day4_Invariant6_FailedHedgeCannotFallThrough` (failure path); success path is `npm run demo` | FORK-VERIFIED (success) / TESTED (failure) 🟢🟡 |
+| **7** | Graph-derived reputation disqualifies unreliable underwriters | `npm run demo`: `services/RookIndexer.ts` replays real `OfferRevoked` events and derives `TIER_3_VOLATILE` from them — the Acting Agent disqualifies on that real history | **FORK-VERIFIED** 🟢 |
+| **8** | Bazantic Recipe executes the full multi-step workflow | `npm run demo`: `/score` and `/settlement` run against the real risk service and real `RookRegistry`; `/prepare-swap` remains a canned response | TESTED 🟡 |
+| **9** | Successful settlement produces verifiable on-chain state | `npm run demo`: real `CoverageSettled`, real tx hash, `registry.getCoverage` re-read independently | **FORK-VERIFIED** 🟢 |
+| **10**| `tx-risky-02` demonstrably fails closed | `npm run demo`: `HARD_BLOCKED`, zero ships/fills on the live node, real exploit-target pre-block | **FORK-VERIFIED** 🟢 |
+
+**Security hardening (beyond the 10 invariants):** `RookRegistry.recordCoverage`
+is restricted to an `onlyRecorder`-authorized caller (only the deployed
+`AgentHedgeExecutor` by default) — earlier it was callable by anyone, making the
+audit trail forgeable. `AgentHedgeExecutor`'s block-list setters are
+`onlyOwner` — earlier anyone could unblock the exploit target, defeating
+Invariant 10. Both fixed with dedicated tests; see `HANDOFF.md` P2.10/P2.11.
 
 ---
 
-## 8. Back-to-Back Demo Rehearsal Results
+## 8. Live, Reproducible, End-to-End (`npm run demo`)
 
-Executed via `test/demo_rehearsal.ts` as two back-to-back runs of the **off-chain
-pipeline** (risk scoring → Graph-profile vetting → quote selection → Bazantic
-Recipe sequencing). At this layer the Aqua fill and `RookRegistry` settlement are
-represented by the gateway, not executed on a node; the live-node end-to-end
-runner that drives real swaps and asserts on real `CoverageSettled` logs is in
-progress (`HANDOFF.md`). Both runs are byte-identical:
+Two fully independent runs — fresh Anvil, fresh deploy, fresh process state each
+time — compared field-by-field with `assert.deepStrictEqual`. They come back
+**byte-identical**, including the settlement transaction hash:
 
 ```json
 {
-  "rehearsal_run_1": {
-    "tx-safe-01": "PROCEEDED_UNHEDGED",
-    "tx-risky-01": "HEDGED_AND_SETTLED (ApexHedge @ 1.05:1, BaitSwitchUnderwriter disqualified via Graph profile)",
-    "tx-risky-02": "HARD_BLOCKED (TargetHardBlocked, 0 funds lost)"
-  },
-  "rehearsal_run_2": {
-    "tx-safe-01": "PROCEEDED_UNHEDGED",
-    "tx-risky-01": "HEDGED_AND_SETTLED (ApexHedge @ 1.05:1, BaitSwitchUnderwriter disqualified via Graph profile)",
-    "tx-risky-02": "HARD_BLOCKED (TargetHardBlocked, 0 funds lost)"
-  },
-  "comparative_audit": "Zero unexplained semantic differences across runs."
+  "scenarios": [
+    { "label": "tx-safe-01",  "outcome": "PROCEEDED_UNHEDGED" },
+    { "label": "tx-risky-01", "outcome": "HEDGED_AND_SETTLED",
+      "quoted": ["AlphaConserv 1.0854", "ApexHedge 1.044 (winner)", "DeltaDynamic 1.1089"],
+      "disqualified": ["DeltaDynamic — TIER_3_VOLATILE, reliability 0.0 (3 real on-chain revokes, 0 settlements)"],
+      "marketEvents": ["AlphaConserv repriced 1.25:1 -> 1.28:1", "DeltaDynamic cancelled its offer"],
+      "execution": { "coverageRecorded": true, "safeAmountOut": "5000e18" } },
+    { "label": "tx-risky-02", "outcome": "HARD_BLOCKED" }
+  ],
+  "gateway": { "x402Protocol": "MPP/1.0", "settlement": { "isSettled": true } }
 }
 ```
+
+Underwriter rates are *computed*, not fixed constants: `spreadBps = base +
+kRisk·riskScore + kInv·fillFraction²` per strategy, so a different ticket size
+picks a different winner (see `test/agents.test.ts`, "a large fill flips the
+winner to the conservative book"). The Graph role is real: `RookIndexer`
+replays on-chain `Shipped`/`OfferRepriced`/`OfferRevoked`/`CoverageSettled` logs
+into the same derived-reputation shape the subgraph mapping produces, and the
+disqualification above is driven by that real history, not a fixture.
 
 ---
 
@@ -204,28 +214,32 @@ progress (`HANDOFF.md`). Both runs are byte-identical:
 ```bash
 # Solidity: real Aqua + SwapVM 0x55 + RookRegistry + AgentHedgeExecutor,
 # executed in Foundry's EVM (no external node required).
-# 26 Rook tests across 6 suites (RevocableRateOffer, RookRegistry, VerifyDay1-4).
+# 28 Rook tests across 6 suites (RevocableRateOffer, RookRegistry, VerifyDay1-4).
 npm run test:contracts
 #   or: forge test --root swap-vm
 
 # Off-chain pipeline: agents, risk scoring, Bazantic gateway/recipe,
-# benchmark, back-to-back rehearsal. 20 tests.
+# benchmark, back-to-back rehearsal. 21 tests.
 npm test
 
 # Both:
 npm run test:all
 
-# LIVE end-to-end: spins up a fresh Anvil node, deploys the full stack,
-# and drives all 3 MOCKS.md scenarios through the real agents ->
-# real SwapVM 0x55 fills -> real RookRegistry settlement, with real
-# transaction hashes. Reproducible (settlement consistently at block 26).
+# LIVE single run: fresh Anvil -> deploy -> real agents -> real SwapVM 0x55
+# fills -> real RookRegistry settlement, with real transaction hashes.
 npm run e2e
+
+# LIVE, TWICE, COMPARED — the DEMO-VERIFIED gate (CLAUDE.md §1, PROMPTS.md §10):
+# two independent clean-state runs, asserted byte-identical.
+npm run demo
 ```
 
 > Build note: this repo's canonical Foundry profile is `via_ir` +
-> `optimizer_runs = 700`. `npm run test:contracts` / `npm run e2e` use a
-> `lowmem` profile (`optimizer_runs = 1`, Yul steps off) that trades gas
-> optimisation for a build that fits in ~2 GB of RAM; CI uses
-> `npm run test:contracts:ci` at the canonical settings. Because `lowmem`
-> bytecode runs large, `npm run e2e` launches Anvil with
+> `optimizer_runs = 700` (`npm run test:contracts:ci`, used in CI). Locally,
+> `npm run test:contracts` / `npm run e2e` / `npm run demo` use a `lowmem`
+> profile (`optimizer_runs = 1`, Yul optimizer steps off) that trades gas
+> optimisation for a build that fits in a few GB of RAM, and skip two upstream
+> `XYCConcentrateFee*` tests that a *cold* `via_ir` compile at that setting
+> reproducibly trips on (unrelated to Rook's own contracts). Because `lowmem`
+> bytecode runs large, `npm run e2e` / `npm run demo` launch Anvil with
 > `--disable-code-size-limit`.
