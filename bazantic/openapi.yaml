@@ -6,13 +6,15 @@ info:
     atomic SwapVM execution preparation, and on-chain settlement verification for autonomous AI agents.
   version: 1.0.0
 servers:
+  - url: https://pos-comfort-app-bloggers.trycloudflare.com/api/v1
+    description: Live tunnel (npm run serve:gateway + cloudflared quick tunnel) — this URL rotates each time the tunnel restarts; update before re-registering with Bazantic.
   - url: http://localhost:3000/api/v1
     description: Local Bazantic Gateway Server
 
 paths:
   /score:
     post:
-      summary: Score transaction risk (Ingredient: scoreTransactionRisk)
+      summary: "Score transaction risk (Ingredient: scoreTransactionRisk)"
       operationId: scoreTransactionRisk
       description: Evaluates transaction risk using deterministic rules and bounded advisory reasoning.
       security:
@@ -35,7 +37,7 @@ paths:
 
   /quotes:
     get:
-      summary: Discover active hedge quotes (Ingredient: discoverHedgeQuotes)
+      summary: "Discover active hedge quotes (Ingredient: discoverHedgeQuotes)"
       operationId: discoverHedgeQuotes
       description: Queries The Graph subgraph for live, competitive underwriter offers and historical reputation.
       parameters:
@@ -61,7 +63,7 @@ paths:
 
   /prepare-swap:
     post:
-      summary: Prepare SwapVM atomic fill calldata (Ingredient: prepareHedgeSwap)
+      summary: "Prepare SwapVM atomic fill calldata (Ingredient: prepareHedgeSwap)"
       operationId: prepareHedgeSwap
       description: Generates SwapVM router order calldata and taker traits for atomic execution on Aqua Core.
       requestBody:
@@ -80,7 +82,7 @@ paths:
 
   /settlement/{txRef}:
     get:
-      summary: Verify on-chain coverage settlement (Ingredient: verifySettlementProof)
+      summary: "Verify on-chain coverage settlement (Ingredient: verifySettlementProof)"
       operationId: verifySettlementProof
       description: Verifies whether the specified transaction has been covered and recorded on RookRegistry.
       parameters:
