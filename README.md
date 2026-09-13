@@ -172,8 +172,14 @@ Invariant 10. Both fixed with dedicated tests; see `HANDOFF.md` P2.10/P2.11.
 ## 8. Live, Reproducible, End-to-End (`npm run demo`)
 
 Two fully independent runs — fresh Anvil, fresh deploy, fresh process state each
-time — compared field-by-field with `assert.deepStrictEqual`. They come back
-**byte-identical**, including the settlement transaction hash:
+time. Without a `GEMINI_API_KEY` set (`npm run demo:mechanism`, also what CI
+runs, since it has no key), they come back **byte-identical** via
+`assert.deepStrictEqual`, including the settlement transaction hash. With a
+key set, the risk-scoring LLM call is genuinely live: the decisions still
+match exactly (`assert.deepStrictEqual` on outcomes/selections/disqualifications),
+but the AI's exact score/reasoning text is expected to vary run-to-run — that's
+evidence it's a real external call, not a fixture — and both runs' raw
+reasoning is printed to prove it.
 
 ```json
 {
@@ -209,6 +215,10 @@ disqualification above is driven by that real history, not a fixture.
   `swap-vm`/`aqua` resolve Solidity imports from `node_modules` (`@1inch/aqua`,
   `@openzeppelin/contracts`, `forge-std`); `yarn.lock` is committed for pinning.
   First `forge` build is slow (`via_ir = true`).
+- Optional: `cp .env.example .env` and set `GEMINI_API_KEY` (free tier —
+  https://aistudio.google.com/apikey, no billing) to exercise the real
+  risk-advisory LLM call in `npm run demo`/`npm run e2e`. Without it, the
+  deterministic rules-only fallback runs — never a hard requirement.
 
 ### Run Tests
 ```bash
@@ -219,7 +229,8 @@ npm run test:contracts
 #   or: forge test --root swap-vm
 
 # Off-chain pipeline: agents, risk scoring, Bazantic gateway/recipe,
-# benchmark, back-to-back rehearsal. 21 tests.
+# benchmark, back-to-back rehearsal. 17 tests. Forces ROOK_RISK_LLM=off
+# so the suite stays deterministic and offline.
 npm test
 
 # Both:
@@ -227,11 +238,17 @@ npm run test:all
 
 # LIVE single run: fresh Anvil -> deploy -> real agents -> real SwapVM 0x55
 # fills -> real RookRegistry settlement, with real transaction hashes.
+# Uses GEMINI_API_KEY from .env if set (see below), otherwise rules-only.
 npm run e2e
 
-# LIVE, TWICE, COMPARED — the DEMO-VERIFIED gate (CLAUDE.md §1, PROMPTS.md §10):
-# two independent clean-state runs, asserted byte-identical.
+# LIVE, TWICE, COMPARED — the DEMO-VERIFIED gate (CLAUDE.md §1, PROMPTS.md §10).
+# With GEMINI_API_KEY set: real Gemini risk-advisory calls, one per risky tx;
+# decisions must match, AI reasoning text is expected to vary (see §8).
 npm run demo
+
+# Same gate, deterministic rules-only (forces the LLM off) — what CI runs,
+# since it has no API key:
+npm run demo:mechanism
 ```
 
 > Build note: this repo's canonical Foundry profile is `via_ir` +
