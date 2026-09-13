@@ -18,3 +18,39 @@ coverage/
 **/coverage/
 .env*
 !.env.example
+
+# Vendored aqua/ and swap-vm/ upstream checkouts: only the subset actually
+# needed to build+test Rook's contracts is tracked (verified via a clean-
+# checkout rebuild, see HANDOFF.md open item 3). These are the upstream
+# repos' own tooling/docs/unrelated test suites — never required, and
+# committing them would bloat history for no benefit. If a future test
+# genuinely needs one of these, `git add -f <path>` it deliberately.
+aqua/.editorconfig
+aqua/.env.example
+aqua/.gas-snapshot
+aqua/.github/
+aqua/.gitignore
+aqua/.npmrc
+aqua/.yarnrc.yml
+aqua/THIRD_PARTY_NOTICES
+aqua/config/
+aqua/docs/
+aqua/examples/
+aqua/foundry.lock
+aqua/test/
+swap-vm/.cursor/
+swap-vm/.editorconfig
+swap-vm/.env.example
+swap-vm/.gas-snapshot
+swap-vm/.github/
+swap-vm/.gitignore
+swap-vm/.npmrc
+swap-vm/.yarnrc.yml
+swap-vm/THIRD_PARTY_NOTICES
+swap-vm/config/
+swap-vm/docs/
+swap-vm/ignition/
+swap-vm/mocks/
+swap-vm/scope.txt
+swap-vm/snapshots/
+swap-vm/test/
