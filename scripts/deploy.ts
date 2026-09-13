@@ -25,6 +25,9 @@ const mintAbi = [
 const setBlockedAbi = [
   { type: "function", name: "setBlockedTarget", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "bool" }], outputs: [] },
 ] as const;
+const setRecorderAbi = [
+  { type: "function", name: "setRecorder", stateMutability: "nonpayable", inputs: [{ type: "address" }, { type: "bool" }], outputs: [] },
+] as const;
 
 export async function deploy(): Promise<Deployment> {
   const pub = publicClient();
@@ -58,6 +61,9 @@ export async function deploy(): Promise<Deployment> {
 
   for (const uw of underwriters) await send(safeToken, mintAbi as unknown as Abi, "mint", [uw, FUND]);
   await send(riskToken, mintAbi as unknown as Abi, "mint", [actingAgent, FUND]);
+
+  // Only the executor may write coverage records (RookRegistry access control).
+  await send(registry, setRecorderAbi as unknown as Abi, "setRecorder", [executor, true]);
 
   // tx-risky-02 (MOCKS.md §3): the flagged exploit address is hard-blocked up front.
   await send(executor, setBlockedAbi as unknown as Abi, "setBlockedTarget", [EXPLOIT_TARGET, true]);

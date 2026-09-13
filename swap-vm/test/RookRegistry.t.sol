@@ -22,7 +22,21 @@ contract RookRegistryTest is Test {
     );
 
     function setUp() public {
-        registry = new RookRegistry();
+        registry = new RookRegistry(); // this test contract is owner + a recorder
+        registry.setRecorder(buyer1, true);
+        registry.setRecorder(buyer2, true);
+    }
+
+    function test_RevertIf_UnauthorizedRecorder() public {
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(abi.encodeWithSelector(RookRegistry.NotAuthorizedRecorder.selector, address(0xBEEF)));
+        registry.recordCoverage(keccak256("tx"), underwriter1, buyer1, 1e18, 100e18);
+    }
+
+    function test_RevertIf_SetRecorderNotOwner() public {
+        vm.prank(address(0xBEEF));
+        vm.expectRevert(abi.encodeWithSelector(RookRegistry.NotOwner.selector, address(0xBEEF)));
+        registry.setRecorder(address(0xBEEF), true);
     }
 
     function test_RecordCoverage_Success() public {
@@ -93,7 +107,7 @@ contract RookRegistryTest is Test {
     function test_RevertIf_ZeroAmount() public {
         bytes32 txRef = keccak256("tx-zero-amount");
 
-        vm.expectRevert(RookRegistry.ZeroAmount.selector);
+        vm.expectRevert(RookRegistry.ZeroTxRef.selector);
         registry.recordCoverage(bytes32(0), underwriter1, buyer1, 1e18, 100e18);
 
         vm.expectRevert(RookRegistry.ZeroAmount.selector);

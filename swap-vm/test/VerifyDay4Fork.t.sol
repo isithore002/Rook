@@ -65,6 +65,7 @@ contract VerifyDay4ForkTest is Test {
         router = new AquaSwapVMRouter(address(aqua), address(0), deployer, "SwapVM", "1.0.0");
         registry = new RookRegistry();
         executor = new AgentHedgeExecutor(address(router), address(registry));
+        registry.setRecorder(address(executor), true);
         mockTarget = new MockRiskyTarget();
 
         TokenMock tA = new TokenMock("Risky Token", "RISK");

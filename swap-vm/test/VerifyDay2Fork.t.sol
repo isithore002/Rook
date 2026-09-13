@@ -43,6 +43,7 @@ contract VerifyDay2ForkTest is Test {
         Aqua aqua = new Aqua();
         AquaSwapVMRouter router = new AquaSwapVMRouter(address(aqua), address(0), deployer, "SwapVM", "1.0.0");
         RookRegistry registry = new RookRegistry();
+        registry.setRecorder(taker, true);
 
         TokenMock tokenA_temp = new TokenMock("Risky Token", "RISK");
         TokenMock tokenB_temp = new TokenMock("Safe Token", "SAFE");

@@ -33,7 +33,34 @@ contract RookRegistry {
     error CoverageAlreadyRecorded(bytes32 txRef);
     error ZeroAddress();
     error ZeroAmount();
+    error ZeroTxRef();
     error InvalidIndex();
+    error NotAuthorizedRecorder(address caller);
+    error NotOwner(address caller);
+
+    /// @notice Owner may authorize recorders (e.g. the AgentHedgeExecutor).
+    address public immutable owner;
+    /// @notice Addresses permitted to call `recordCoverage`.
+    mapping(address => bool) public authorizedRecorders;
+
+    event RecorderSet(address indexed recorder, bool authorized);
+
+    constructor() {
+        owner = msg.sender;
+        authorizedRecorders[msg.sender] = true;
+    }
+
+    /// @notice Authorize or revoke a coverage recorder. Owner only.
+    function setRecorder(address recorder, bool authorized) external {
+        if (msg.sender != owner) revert NotOwner(msg.sender);
+        authorizedRecorders[recorder] = authorized;
+        emit RecorderSet(recorder, authorized);
+    }
+
+    modifier onlyRecorder() {
+        if (!authorizedRecorders[msg.sender]) revert NotAuthorizedRecorder(msg.sender);
+        _;
+    }
 
     /// @dev Internal mapping from txRef to record
     mapping(bytes32 => CoverageRecord) private _coverages;
@@ -56,8 +83,8 @@ contract RookRegistry {
         address underwriter,
         uint256 rate,
         uint256 size
-    ) external returns (CoverageRecord memory) {
-        return recordCoverage(txRef, underwriter, msg.sender, rate, size);
+    ) external onlyRecorder returns (CoverageRecord memory) {
+        return _recordCoverage(txRef, underwriter, msg.sender, rate, size);
     }
 
     /**
@@ -74,8 +101,18 @@ contract RookRegistry {
         address buyer,
         uint256 rate,
         uint256 size
-    ) public returns (CoverageRecord memory) {
-        if (txRef == bytes32(0)) revert ZeroAmount();
+    ) public onlyRecorder returns (CoverageRecord memory) {
+        return _recordCoverage(txRef, underwriter, buyer, rate, size);
+    }
+
+    function _recordCoverage(
+        bytes32 txRef,
+        address underwriter,
+        address buyer,
+        uint256 rate,
+        uint256 size
+    ) internal returns (CoverageRecord memory) {
+        if (txRef == bytes32(0)) revert ZeroTxRef();
         if (underwriter == address(0) || buyer == address(0)) revert ZeroAddress();
         if (rate == 0 || size == 0) revert ZeroAmount();
         if (_coverages[txRef].timestamp != 0) revert CoverageAlreadyRecorded(txRef);
