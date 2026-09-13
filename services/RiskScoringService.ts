@@ -182,8 +182,12 @@ export class RiskScoringService {
           contents: [{ role: "user", parts: [{ text: userPayload }] }],
           config: {
             systemInstruction: system,
-            maxOutputTokens: 300,
+            maxOutputTokens: 512,
             responseMimeType: "application/json",
+            // gemini-2.5-flash "thinks" by default, and thinking tokens count
+            // against maxOutputTokens — without this the model can spend the
+            // whole budget reasoning and emit no final answer text at all.
+            thinkingConfig: { thinkingBudget: 0 },
             abortSignal: controller.signal,
           },
         });
@@ -201,7 +205,8 @@ export class RiskScoringService {
       const reasoning = typeof parsed.reasoning === "string" ? parsed.reasoning.slice(0, 200) : "";
 
       return { scoreAdjustment: adj, notes: `LLM advisory (${model}): ${reasoning}` };
-    } catch {
+    } catch (err) {
+      if (process.env.ROOK_LLM_DEBUG) console.error("[llmAdvisory DEBUG]", err);
       return null;
     }
   }
