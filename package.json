@@ -16,6 +16,7 @@
     "e2e": "npm run build:contracts && node --experimental-strip-types scripts/e2e-live.ts",
     "demo": "npm run build:contracts && node --experimental-strip-types scripts/demo.ts",
     "demo:mechanism": "npm run build:contracts && cross-env ROOK_RISK_LLM=off node --experimental-strip-types scripts/demo.ts",
+    "serve:gateway": "npm run build:contracts && node --experimental-strip-types scripts/serve-gateway.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

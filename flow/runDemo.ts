@@ -11,13 +11,14 @@ import { UnderwriterAgent } from "../agents/UnderwriterAgent.ts";
 import { ActingAgent } from "../agents/ActingAgent.ts";
 import { RookChain } from "../chain/rookChain.ts";
 import { RookIndexer } from "../services/RookIndexer.ts";
+import type { SubgraphUnderwriterProfile } from "../services/GraphClientService.ts";
 import { BazanticGatewayServer, type SettlementInfo } from "../services/BazanticGatewayServer.ts";
 import { publicClient, type Deployment } from "../chain/config.ts";
 import { runScenarioLive, type LiveScenarioTrace } from "./runScenarioLive.ts";
 import type { ProposedTransaction, RiskResult } from "../agents/types.ts";
 
-const ASSET = "0xE224621223356f15Cf9618007e7C22477067De69";
-const TXREF = {
+export const ASSET = "0xE224621223356f15Cf9618007e7C22477067De69";
+export const TXREF = {
   safe: "0x1111111111111111111111111111111111111111111111111111111111111111",
   risky: "0x2222222222222222222222222222222222222222222222222222222222222222",
   blocked: "0x3333333333333333333333333333333333333333333333333333333333333333",
@@ -36,7 +37,27 @@ export interface DemoTrace {
   };
 }
 
-export async function runDemoOnce(d: Deployment, gatewayPort: number): Promise<DemoTrace> {
+export interface DemoGateway {
+  chain: RookChain;
+  riskService: RiskScoringService;
+  underwriters: UnderwriterAgent[];
+  actingAgent: ActingAgent;
+  indexer: RookIndexer;
+  gateway: BazanticGatewayServer;
+  dd: SubgraphUnderwriterProfile;
+  ac: SubgraphUnderwriterProfile;
+}
+
+/**
+ * Everything a Bazantic gateway needs before it can answer real requests:
+ * deployed contracts, on-chain underwriter history (so reliability/reputation
+ * isn't all-zeros), Graph-derived profiles, and a started gateway wired to
+ * the real registry. Shared by `runDemoOnce` (ephemeral, stops the gateway)
+ * and `scripts/serve-gateway.ts` (persistent, for the Bazantic bounty's
+ * "deploy an x402/MPP Gateway" requirement — the ephemeral demo run alone
+ * can't satisfy that, since it exits after one comparison).
+ */
+export async function setupDemoGateway(d: Deployment, gatewayPort: number): Promise<DemoGateway> {
   const chain = new RookChain(d);
   const riskService = new RiskScoringService();
   const [u1, u2, u3] = d.underwriters as [Address, Address, Address];
@@ -88,6 +109,12 @@ export async function runDemoOnce(d: Deployment, gatewayPort: number): Promise<D
     },
   });
   await gateway.start();
+
+  return { chain, riskService, underwriters, actingAgent, indexer, gateway, dd, ac };
+}
+
+export async function runDemoOnce(d: Deployment, gatewayPort: number): Promise<DemoTrace> {
+  const { chain, riskService, underwriters, actingAgent, gateway, dd, ac } = await setupDemoGateway(d, gatewayPort);
 
   try {
     const scenarios: LiveScenarioTrace[] = [];
