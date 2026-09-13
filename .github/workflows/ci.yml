@@ -38,7 +38,7 @@ jobs:
       - run: npm run test:contracts
 
   demo:
-    name: DEMO-VERIFIED (two clean-state runs, byte-identical)
+    name: DEMO-VERIFIED (two clean-state runs, byte-identical mechanism)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -52,4 +52,8 @@ jobs:
         working-directory: swap-vm
         run: corepack enable && yarn install --immutable
       - run: npm ci
-      - run: npm run demo
+      # No GEMINI_API_KEY secret here on purpose: this job proves the
+      # mechanism (chain, contracts, subgraph indexing, gateway) is
+      # byte-reproducible on its own. `npm run demo` (LLM live) is the
+      # human-run path once a key is configured — see README §8.
+      - run: npm run demo:mechanism

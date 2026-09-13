@@ -30,7 +30,7 @@ export interface ShippedOffer {
 export interface LiveScenarioTrace {
   label: string;
   txRef: Hex;
-  risk: { score: number; hardBlock: boolean; requiresHedge: boolean };
+  risk: { score: number; hardBlock: boolean; requiresHedge: boolean; reasoning: string };
   shipped: ShippedOffer[];
   disqualified: { name: string; reason: string }[];
   marketEvents: string[];
@@ -70,7 +70,7 @@ export async function runScenarioLive(opts: RunScenarioOpts): Promise<LiveScenar
   const trace: LiveScenarioTrace = {
     label,
     txRef,
-    risk: { score: risk.riskScore, hardBlock: risk.hardBlock, requiresHedge: risk.requiresHedge },
+    risk: { score: risk.riskScore, hardBlock: risk.hardBlock, requiresHedge: risk.requiresHedge, reasoning: risk.reasoning },
     shipped: [],
     disqualified: [],
     marketEvents: [],

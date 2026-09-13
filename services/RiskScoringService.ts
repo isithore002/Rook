@@ -1,6 +1,84 @@
 import type { ProposedTransaction, RiskResult } from "../agents/types.ts";
 
 /**
+ * Local, in-process guard against exceeding the Gemini free-tier quota.
+ * Exact limits are account-specific and shown live at
+ * https://aistudio.google.com/rate-limit — the defaults below are
+ * deliberately conservative placeholders; tune GEMINI_RPM_LIMIT /
+ * GEMINI_RPD_LIMIT once you've checked your own dashboard. When the local
+ * budget is spent, `llmAdvisory` skips the network call entirely (no 429
+ * round-trip, no wasted quota) and goes straight to the rules-only fallback.
+ */
+class SlidingWindowLimiter {
+  private hits: number[] = [];
+  private readonly limit: number;
+  private readonly windowMs: number;
+
+  constructor(limit: number, windowMs: number) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+  }
+
+  private prune(now: number): void {
+    const cutoff = now - this.windowMs;
+    this.hits = this.hits.filter((t) => t > cutoff);
+  }
+
+  wouldAllow(now: number): boolean {
+    this.prune(now);
+    return this.hits.length < this.limit;
+  }
+
+  commit(now: number): void {
+    this.hits.push(now);
+  }
+
+  get used(): number {
+    return this.hits.length;
+  }
+
+  get max(): number {
+    return this.limit;
+  }
+}
+
+// Measured live against a real free-tier key: Google's own 429 reports
+// "GenerateRequestsPerMinutePerProjectPerModel-FreeTier ... limit: 5" for
+// gemini-2.5-flash. Default to 4 (below the observed ceiling, since other
+// callers may share the same key/project) — override via env once you've
+// checked https://aistudio.google.com/rate-limit for your own account.
+const DEFAULT_GEMINI_RPM_LIMIT = 4;
+const DEFAULT_GEMINI_RPD_LIMIT = 200;
+
+// Module-level (not per-instance): the quota is per API key for the whole
+// process, not per RiskScoringService instance.
+const geminiRpmLimiter = new SlidingWindowLimiter(
+  Number(process.env.GEMINI_RPM_LIMIT) || DEFAULT_GEMINI_RPM_LIMIT,
+  60_000
+);
+const geminiRpdLimiter = new SlidingWindowLimiter(
+  Number(process.env.GEMINI_RPD_LIMIT) || DEFAULT_GEMINI_RPD_LIMIT,
+  24 * 60 * 60_000
+);
+
+/**
+ * Module-level (not per-instance, for the same reason as the limiters above —
+ * several RiskScoringService instances can exist in one process, e.g. one
+ * inside ActingAgent and another inside BazanticGatewayServer, and the quota
+ * they share is per API key, not per instance).
+ *
+ * Re-scoring the identical txRef within a short window is the same
+ * risk-scoring decision, not a new one (CLAUDE.md §4: "one LLM call per
+ * risk-scoring decision") — e.g. the demo scores tx-risky-01 once directly
+ * and once via the Bazantic gateway's /score endpoint to prove that surface
+ * independently, and ActingAgent.evaluateAndPlan re-derives risk internally.
+ * Without this cache each of those is a separate real Gemini call for what is
+ * conceptually one decision, which needlessly multiplies free-tier usage.
+ */
+const scoreCache = new Map<string, { result: RiskResult; expiresAt: number }>();
+const SCORE_CACHE_TTL_MS = Number(process.env.RISK_SCORE_CACHE_TTL_MS) || 60_000;
+
+/**
  * Risk-Scoring Service
  * Combines a deterministic rules engine (sole authority for hard blocks and baseline score)
  * with a bounded LLM advisory layer that evaluates transaction descriptions and intent.
@@ -22,11 +100,23 @@ export class RiskScoringService {
   ]);
 
   /**
-   * Score a proposed transaction
+   * Score a proposed transaction. Re-scoring the same `txRef` within
+   * `RISK_SCORE_CACHE_TTL_MS` (default 60s) returns the cached result instead
+   * of re-running (and re-calling the LLM for) the identical decision.
    * @param tx Proposed transaction details
    * @returns Risk evaluation result
    */
   public async scoreTransaction(tx: ProposedTransaction): Promise<RiskResult> {
+    const now = Date.now();
+    const cached = scoreCache.get(tx.txRef);
+    if (cached && cached.expiresAt > now) return cached.result;
+
+    const result = await this.scoreTransactionUncached(tx);
+    scoreCache.set(tx.txRef, { result, expiresAt: now + SCORE_CACHE_TTL_MS });
+    return result;
+  }
+
+  private async scoreTransactionUncached(tx: ProposedTransaction): Promise<RiskResult> {
     // 1. DETERMINISTIC RULES EVALUATION (Authority Layer)
     const normalizedTarget = tx.target.toLowerCase();
 
@@ -139,8 +229,9 @@ export class RiskScoringService {
    * One bounded Gemini call for advisory risk context (free-tier eligible —
    * see ai.google.dev/pricing for current limits). Returns `null` (caller
    * falls back to rules) when no API key is configured, when
-   * `ROOK_RISK_LLM=off`, or on any error/timeout. Output is clamped to an
-   * integer in [-10, 10]; it is never authorizing.
+   * `ROOK_RISK_LLM=off`, when the local rate guard is exhausted, or on any
+   * error/timeout. Output is clamped to an integer in [-10, 10]; it is never
+   * authorizing.
    */
   private async llmAdvisory(
     tx: ProposedTransaction,
@@ -149,8 +240,23 @@ export class RiskScoringService {
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
     if (!apiKey || process.env.ROOK_RISK_LLM === "off") return null;
 
+    // Local budget guard — skip the network call entirely rather than firing
+    // one that would likely 429 and burn quota for nothing.
+    const now = Date.now();
+    if (!geminiRpmLimiter.wouldAllow(now) || !geminiRpdLimiter.wouldAllow(now)) {
+      if (process.env.ROOK_LLM_DEBUG) {
+        console.error(
+          `[llmAdvisory] local rate guard exhausted (rpm ${geminiRpmLimiter.used}/${geminiRpmLimiter.max}, ` +
+            `rpd ${geminiRpdLimiter.used}/${geminiRpdLimiter.max}) — using rules-only fallback`
+        );
+      }
+      return null;
+    }
+    geminiRpmLimiter.commit(now);
+    geminiRpdLimiter.commit(now);
+
+    const { GoogleGenAI, ApiError } = await import("@google/genai");
     try {
-      const { GoogleGenAI } = await import("@google/genai");
       const ai = new GoogleGenAI({ apiKey });
       const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
@@ -206,7 +312,10 @@ export class RiskScoringService {
 
       return { scoreAdjustment: adj, notes: `LLM advisory (${model}): ${reasoning}` };
     } catch (err) {
-      if (process.env.ROOK_LLM_DEBUG) console.error("[llmAdvisory DEBUG]", err);
+      if (process.env.ROOK_LLM_DEBUG) {
+        const rateLimited = err instanceof ApiError && err.status === 429;
+        console.error(rateLimited ? "[llmAdvisory] Gemini 429 (real quota hit despite local guard)" : "[llmAdvisory DEBUG]", err);
+      }
       return null;
     }
   }
