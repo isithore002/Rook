@@ -136,8 +136,9 @@ export class RiskScoringService {
   }
 
   /**
-   * One bounded Claude call for advisory risk context. Returns `null` (caller
-   * falls back to rules) when `ANTHROPIC_API_KEY` is unset, when
+   * One bounded Gemini call for advisory risk context (free-tier eligible —
+   * see ai.google.dev/pricing for current limits). Returns `null` (caller
+   * falls back to rules) when no API key is configured, when
    * `ROOK_RISK_LLM=off`, or on any error/timeout. Output is clamped to an
    * integer in [-10, 10]; it is never authorizing.
    */
@@ -145,12 +146,13 @@ export class RiskScoringService {
     tx: ProposedTransaction,
     baselineScore: number
   ): Promise<{ scoreAdjustment: number; notes: string } | null> {
-    if (!process.env.ANTHROPIC_API_KEY || process.env.ROOK_RISK_LLM === "off") return null;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey || process.env.ROOK_RISK_LLM === "off") return null;
 
     try {
-      const { default: Anthropic } = await import("@anthropic-ai/sdk");
-      const client = new Anthropic();
-      const model = process.env.ANTHROPIC_MODEL || "claude-opus-5";
+      const { GoogleGenAI } = await import("@google/genai");
+      const ai = new GoogleGenAI({ apiKey });
+      const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 
       const system =
         "You are a risk advisor for autonomous on-chain agent transactions. " +
@@ -171,21 +173,25 @@ export class RiskScoringService {
         baselineScore,
       });
 
-      const resp = await client.messages.create(
-        {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 12_000);
+      let resp;
+      try {
+        resp = await ai.models.generateContent({
           model,
-          max_tokens: 1024, // headroom for adaptive thinking + the JSON line
-          output_config: { effort: "low" },
-          system,
-          messages: [{ role: "user", content: userPayload }],
-        },
-        { timeout: 12000 }
-      );
+          contents: [{ role: "user", parts: [{ text: userPayload }] }],
+          config: {
+            systemInstruction: system,
+            maxOutputTokens: 300,
+            responseMimeType: "application/json",
+            abortSignal: controller.signal,
+          },
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
 
-      const text = resp.content
-        .map((b) => (b.type === "text" ? b.text : ""))
-        .join("")
-        .trim();
+      const text = (resp.text ?? "").trim();
       const json = text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1);
       const parsed = JSON.parse(json) as { adjustment?: unknown; reasoning?: unknown };
 
